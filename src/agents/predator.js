@@ -5,6 +5,7 @@ class Predator {
     this.y = y;
     this.gridSize = gridSize;
     this.qTable = {};
+    this.stepCount = 0;
   }
 
   move(action) {
@@ -30,15 +31,27 @@ class Predator {
 
   chooseAction(state) {
     const stateStr = this.stateToString(state);
-    if (Math.random() < 0.1 || !this.qTable[stateStr]) {
+    const temp = 1.4;
+    const actions = this.getActions();
+    if (!this.qTable[stateStr]) {
       // Choose a random action with 10% probability, or if we haven't seen this state before
-      const actions = this.getActions();
       return actions[Math.floor(Math.random() * actions.length)];
     } else {
-      // Otherwise, choose the action with the highest expected reward
-      return Object.keys(this.qTable[stateStr]).reduce((a, b) =>
-        this.qTable[stateStr][a] > this.qTable[stateStr][b] ? a : b
-      );
+      const probabilities = actions.map((action) => {
+        const qValue = this.qTable[stateStr][action] || 0;
+        return Math.exp(qValue / temp);
+      });
+
+      const sumProbabilities = probabilities.reduce((a, b) => a + b, 0);
+      const randomValue = Math.random() * sumProbabilities;
+
+      let cumulativeProb = 0;
+      for (let i = 0; i < probabilities.length; i++) {
+        cumulativeProb += probabilities[i];
+        if (randomValue < cumulativeProb) {
+          return actions[i];
+        }
+      }
     }
   }
 
@@ -52,8 +65,10 @@ class Predator {
     const nextMaxQ = Math.max(
       ...Object.values(this.qTable[nextStateStr] || {})
     );
+    const learningRate = 1 / (1 + this.stepCount / 1000);
     this.qTable[stateStr][action] =
-      oldQ + 0.1 * (reward + 0.9 * nextMaxQ - oldQ);
+      oldQ + learningRate * (reward + 0.9 * nextMaxQ - oldQ);
+    this.stepCount++;
   }
 
   getState() {
