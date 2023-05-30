@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Predator-Prey Simulation</title>
+    <script src="/socket.io/socket.io.js"></script>
+
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+      }
+      #grid {
+        position: absolute;
+        top: 0;
+        left: 0;
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        grid-template-rows: repeat(10, 1fr);
+        gap: 2px;
+        width: 100vw; /* Changed to 100vw to fill the entire viewport width */
+        height: 100vh; /* Changed to 100vh to fill the entire viewport height */
+        background-color: white;
+        border: 1px solid black;
+      }
+      .predator,
+      .prey {
+        width: 40%;
+        height: 40%;
+        border-radius: 50%;
+      }
+      .predator {
+        background-color: red;
+      }
+      .prey {
+        background-color: blue;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="grid">
+      <!-- Empty cells to create grid structure -->
+      <div class="grid-cell"></div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
