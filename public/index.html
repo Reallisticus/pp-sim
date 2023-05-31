@@ -3,7 +3,7 @@
   <head>
     <title>Predator-Prey Simulation</title>
     <script src="/socket.io/socket.io.js"></script>
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
     <style>
       body,
       html {
@@ -18,25 +18,22 @@
         top: 0;
         left: 0;
         display: grid;
-        grid-template-columns: repeat(10, 1fr);
-        grid-template-rows: repeat(10, 1fr);
-        gap: 2px;
-        width: 100vw; /* Changed to 100vw to fill the entire viewport width */
-        height: 100vh; /* Changed to 100vh to fill the entire viewport height */
-        background-color: white;
+        grid-template-columns: repeat(25, 1fr);
+        grid-template-rows: repeat(25, 1fr);
+        gap: 1px;
+        width: calc(100vw - 50px);
+        height: calc(100vh - 50px);
         border: 1px solid black;
       }
-      .predator,
-      .prey {
-        width: 40%;
-        height: 40%;
-        border-radius: 50%;
-      }
+
       .predator {
         background-color: red;
       }
       .prey {
         background-color: blue;
+      }
+      .grid-cell {
+        background-color: white;
       }
     </style>
   </head>
@@ -45,7 +42,6 @@
       <!-- Empty cells to create grid structure -->
       <div class="grid-cell"></div>
     </div>
-
     <script src="script.js"></script>
   </body>
 </html>

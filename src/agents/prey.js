@@ -1,11 +1,20 @@
 // prey.js
 class Prey {
-  constructor(x, y, gridSize) {
+  constructor(x, y, grid) {
     this.x = x;
     this.y = y;
-    this.gridSize = gridSize;
+    this.grid = grid;
     this.qTable = {};
     this.stepCount = 0;
+  }
+
+  setPosition(x, y) {
+    if (this.grid.isValidMove(x, y)) {
+      this.x = x;
+      this.y = y;
+    } else {
+      throw new Error('Invalid move');
+    }
   }
 
   move(action) {
@@ -14,13 +23,13 @@ class Prey {
         this.y = Math.max(0, this.y - 1);
         break;
       case 'down':
-        this.y = Math.min(this.gridSize - 1, this.y + 1);
+        this.y = Math.min(this.grid.size - 1, this.y + 1);
         break;
       case 'left':
         this.x = Math.max(0, this.x - 1);
         break;
       case 'right':
-        this.x = Math.min(this.gridSize - 1, this.x + 1);
+        this.x = Math.min(this.grid.size - 1, this.x + 1);
         break;
     }
   }
