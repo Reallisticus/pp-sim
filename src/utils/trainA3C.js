@@ -1,3 +1,5 @@
+// We will potentially explore whether we can upgrade the algorithm with A3C instead.
+
 // const { ActorCriticNetwork } = require('../agents/actorCriticNetwork');
 
 // async function trainA3C() {

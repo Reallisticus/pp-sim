@@ -2,17 +2,46 @@
 class Grid {
   constructor(size) {
     this.size = size;
+
+    this.obstacles = [];
+  }
+
+  setPredatorsAndPreys(predators, preys) {
+    this.predators = predators;
+    this.preys = preys;
+  }
+
+  addObstacle(x, y) {
+    this.obstacles.push({ x, y });
+  }
+
+  isObstacle(x, y) {
+    return this.obstacles.some(
+      (obstacle) => obstacle.x === x && obstacle.y === y
+    );
   }
 
   isValidMove(x, y) {
-    return x >= 0 && x < this.size && y >= 0 && y < this.size;
+    return !this.isObstacle(x, y);
   }
 
   randomPosition() {
-    return {
-      x: Math.floor(Math.random() * this.size),
-      y: Math.floor(Math.random() * this.size),
-    };
+    let position;
+    let isOccupied;
+
+    do {
+      position = {
+        x: Math.floor(Math.random() * this.size),
+        y: Math.floor(Math.random() * this.size),
+      };
+
+      isOccupied =
+        this.isObstacle(position.x, position.y) ||
+        this.predators.some((p) => p.x === position.x && p.y === position.y) ||
+        this.preys.some((p) => p.x === position.x && p.y === position.y);
+    } while (isOccupied);
+
+    return position;
   }
 
   isCollision(predatorX, predatorY, preyX, preyY) {
