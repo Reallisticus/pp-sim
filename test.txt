@@ -1,0 +1,643 @@
+Here's my full code-base, now, thinking in a step-by-step way, I want you to go through all of these files and spot all issues or potential issues ->
+
+My folder structure is as follows:
+
+src/agents/agent.js
+src/agents/predator.js
+src/agents/prey.js
+src/environment/grid.js
+src/server/app.js
+src/monitoring/monitoring.js
+src/simulation/simulation.js
+src/simulation/config.js
+public/script.js
+public/index.html
+
+----
+
+Here's the bigger part of my code:
+
+//agent.js
+
+class Agent {
+  constructor(x, y, grid) {
+    this.grid = grid;
+    if (x !== undefined && y !== undefined) {
+      this.setPosition(x, y);
+    }
+    this.qTable = {};
+    this.stepCount = 0;
+  }
+
+  setPosition(x, y) {
+    const newX = x % this.grid.size;
+    const newY = y % this.grid.size;
+
+    if (this.grid.isValidMove(newX, newY)) {
+      this.x = newX;
+      this.y = newY;
+    } else {
+      // Find the nearest valid position
+      const validPositions = this.getValidNeighborPositions();
+      if (validPositions.length > 0) {
+        const nearestValidPosition = validPositions.reduce((prev, curr) => {
+          const prevDistance = this.calculateDistance(x, y, prev.x, prev.y);
+          const currDistance = this.calculateDistance(x, y, curr.x, curr.y);
+          return prevDistance < currDistance ? prev : curr;
+        });
+
+        this.x = nearestValidPosition.x;
+        this.y = nearestValidPosition.y;
+      } else {
+        throw new Error('Invalid move', x, y);
+      }
+    }
+  }
+
+  getValidNeighborPositions() {
+    const neighbors = [
+      { x: (this.x - 1 + this.grid.size) % this.grid.size, y: this.y },
+      { x: (this.x + 1) % this.grid.size, y: this.y },
+      { x: this.x, y: (this.y - 1 + this.grid.size) % this.grid.size },
+      { x: this.x, y: (this.y + 1) % this.grid.size },
+    ];
+
+    return neighbors.filter((neighbor) =>
+      this.grid.isValidMove(neighbor.x, neighbor.y)
+    );
+  }
+
+  calculateDistance(x1, y1, x2, y2) {
+    const dx = Math.abs(x1 - x2);
+    const dy = Math.abs(y1 - y2);
+    const wrappedDx = Math.min(dx, this.grid.size - dx);
+    const wrappedDy = Math.min(dy, this.grid.size - dy);
+    return Math.sqrt(Math.pow(wrappedDx, 2) + Math.pow(wrappedDy, 2));
+  }
+
+  move(action) {
+    let newX = this.x;
+    let newY = this.y;
+
+    switch (action) {
+      case 'up':
+        newY = (this.y - 1 + this.grid.size) % this.grid.size;
+        break;
+      case 'down':
+        newY = (this.y + 1) % this.grid.size;
+        break;
+      case 'left':
+        newX = (this.x - 1 + this.grid.size) % this.grid.size;
+        break;
+      case 'right':
+        newX = (this.x + 1) % this.grid.size;
+        break;
+    }
+
+    if (this.grid.isValidMove(newX, newY)) {
+      this.x = newX;
+      this.y = newY;
+    }
+  }
+
+  getState() {
+    return { x: this.x, y: this.y };
+  }
+
+  getActions() {
+    return ['up', 'down', 'left', 'right'];
+  }
+
+  stateToString(state) {
+    return `${state.x},${state.y}`;
+  }
+
+  chooseAction(state, temp) {
+    const stateStr = this.stateToString(state);
+    const actions = this.getActions();
+
+    if (!this.qTable[stateStr]) {
+      // Initialize the qTable for all possible actions with 0 values
+      this.qTable[stateStr] = {};
+      actions.forEach((action) => {
+        this.qTable[stateStr][action] = 0;
+      });
+    }
+
+    const actionProbabilities = this.calculateActionProbabilities(
+      stateStr,
+      actions,
+      temp
+    );
+    return this.selectActionBasedOnProbabilities(actions, actionProbabilities);
+  }
+
+  calculateActionProbabilities(stateStr, actions, temp) {
+    return actions.map((action) => {
+      const qValue = this.qTable[stateStr][action] || 0;
+      return Math.exp(qValue / temp);
+    });
+  }
+
+  selectActionBasedOnProbabilities(actions, probabilities) {
+    const sumProbabilities = probabilities.reduce((a, b) => a + b, 0);
+    const randomValue = Math.random() * sumProbabilities;
+
+    let cumulativeProb = 0;
+    for (let i = 0; i < probabilities.length; i++) {
+      cumulativeProb += probabilities[i];
+      if (randomValue < cumulativeProb) {
+        return actions[i];
+      }
+    }
+  }
+
+  updateQTable(state, action, reward, nextState) {
+    const stateStr = this.stateToString(state);
+    const nextStateStr = this.stateToString(nextState);
+    if (!this.qTable[stateStr]) {
+      this.qTable[stateStr] = {};
+    }
+    const oldQ = this.qTable[stateStr][action] || 0;
+    const nextMaxQ = Math.max(
+      ...Object.values(this.qTable[nextStateStr] || {})
+    );
+    const learningRate = 1 / (1 + this.stepCount / 1000);
+
+    this.qTable[stateStr][action] =
+      oldQ + learningRate * (reward + 0.9 * nextMaxQ - oldQ);
+    this.stepCount++;
+  }
+}
+
+module.exports = Agent;
+
+---
+
+const Agent = require('./agent');
+
+// prey.js
+class Prey extends Agent {
+  constructor(x, y, grid) {
+    super(x, y, grid);
+    this.fieldOfView = 270;
+    this.qTable = {};
+  }
+
+  chooseAction(state) {
+    const temp = Math.max(1.4 - this.stepCount / 10000, 0.1);
+    return super.chooseAction(state, temp);
+  }
+
+  getReward(predatorState) {
+    const dx = Math.abs(this.x - predatorState.x);
+    const dy = Math.abs(this.y - predatorState.y);
+    const wrappedDx = Math.min(dx, this.grid.size - dx);
+    const wrappedDy = Math.min(dy, this.grid.size - dy);
+    const distance = Math.sqrt(Math.pow(wrappedDx, 2) + Math.pow(wrappedDy, 2));
+    return distance;
+  }
+}
+
+module.exports = Prey;
+
+---
+
+predator.js is kind of the same...
+
+---
+
+//config.js
+
+const config = {
+  MAX_STEPS_PER_EPISODE: 1000,
+  collisionRewardPredator: 100,
+  collisionRewardPrey: -100,
+  nrOfObstacles: 25,
+  nrOfPredators: 50,
+  nrOfPreys: 50,
+  gridSize: 50,
+};
+
+module.exports = config;
+
+---
+
+//simulation.js
+
+const Predator = require('../agents/predator');
+const Prey = require('../agents/prey');
+const Grid = require('../environment/grid');
+const Monitoring = require('../monitoring/monitoring');
+const config = require('../config');
+
+const MAX_STEPS_PER_EPISODE = config.MAX_STEPS_PER_EPISODE;
+
+// Create a new grid
+const grid = new Grid(config.gridSize);
+const monitoring = new Monitoring();
+
+let predatorTotalReward = 0;
+let preyTotalReward = 0;
+let stepCount = 0;
+let episodeCount = 0;
+
+let collisionRewardPredator = config.collisionRewardPredator;
+let collisionRewardPrey = config.collisionRewardPrey;
+
+const nrOfObstacles = config.nrOfObstacles;
+
+const predators = [];
+const preys = [];
+
+for (let i = 0; i < config.nrOfPredators; i++) {
+  predators.push(new Predator(null, null, grid));
+  preys.push(new Prey(null, null, grid));
+}
+
+const testingPredator = new Predator(null, null, grid);
+predators.push(testingPredator);
+
+// Rely on placePredators and placePreys methods to set positions
+grid.setPredatorsAndPreys(predators, preys);
+grid.placePredators(predators);
+grid.placePreys(preys);
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
+function resetPositions() {
+  monitoring.logEpisodeResults(predatorTotalReward, preyTotalReward, stepCount);
+  monitoring.logQValues(testingPredator.qTable);
+  predatorTotalReward = 0;
+  preyTotalReward = 0;
+  stepCount = 0;
+  shuffleArray(predators);
+  shuffleArray(preys);
+
+  grid.placePredators(predators);
+  grid.placePreys(preys);
+}
+
+for (let i = 0; i < nrOfObstacles; i++) {
+  let obstaclePos = grid.randomPosition();
+  while (
+    predators.some((p) => p.x === obstaclePos.x && p.y === obstaclePos.y) ||
+    preys.some((p) => p.x === obstaclePos.x && p.y === obstaclePos.y)
+  ) {
+    obstaclePos = grid.randomPosition();
+  }
+  grid.addObstacle(obstaclePos.x, obstaclePos.y);
+}
+
+function runStep(predator, prey) {
+  const predatorAction = predator.chooseAction(predator.getState());
+  predator.move(predatorAction);
+
+  const preyAction = prey.chooseAction(prey.getState());
+  prey.move(preyAction);
+
+  const predatorReward = predator.getReward(prey.getState());
+  const preyReward = prey.getReward(predator.getState());
+
+  const isCaught = grid.isCollision(predator.x, predator.y, prey.x, prey.y);
+
+  if (isCaught || stepCount >= MAX_STEPS_PER_EPISODE) {
+    episodeCount++;
+
+    predatorTotalReward += predatorReward;
+    preyTotalReward += preyReward;
+
+    if (isCaught) {
+      predatorTotalReward += collisionRewardPredator;
+      preyTotalReward += collisionRewardPrey;
+    }
+
+    resetPositions();
+  } else {
+    predatorTotalReward += predatorReward;
+    preyTotalReward += preyReward;
+  }
+
+  predator.updateQTable(
+    predator.getState(),
+    predatorAction,
+    predatorReward,
+    predator.getState()
+  );
+  prey.updateQTable(prey.getState(), preyAction, preyReward, prey.getState());
+
+  return { predatorReward, preyReward };
+}
+
+function startSimulation(io, socket) {
+  socket.emit('data', {
+    predators: predators.map(({ x, y }) => ({ x, y })),
+    preys: preys.map(({ x, y }) => ({ x, y })),
+    obstacles: grid.obstacles,
+    monitoring: {
+      episodeResults: monitoring.episodeResults,
+      qValues: monitoring.qValues,
+    },
+  });
+
+  setInterval(() => {
+    console.log(`Episode: ${episodeCount}`);
+
+    predators.forEach((predator) => {
+      preys.forEach((prey) => {
+        const { predatorReward, preyReward } = runStep(predator, prey);
+      });
+    });
+
+    stepCount++;
+
+    socket.emit('data', {
+      predators: predators.map(({ x, y }) => ({ x, y })),
+      preys: preys.map(({ x, y }) => ({ x, y })),
+      obstacles: grid.obstacles,
+      monitoring: {
+        episodeResults: monitoring.episodeResults,
+        qValues: monitoring.qValues,
+      },
+    });
+  }, 2000);
+}
+
+module.exports = { startSimulation };
+
+---
+
+//public/script.js
+
+const socket = io();
+const gridEl = document.getElementById('grid');
+
+const gridSize = 50;
+
+const agentSize = 10;
+
+socket.on('data', (data) => {
+  console.log(data);
+  updateDots(data.obstacles, 'obstacle');
+  updateDots(data.predators, 'predator');
+  updateDots(data.preys, 'prey');
+
+  plotAverageRewards(data.monitoring.episodeResults);
+  plotStepsPerEpisode(data.monitoring.episodeResults);
+  plotMaxQValues(data.monitoring.qValues);
+});
+
+function plotAverageRewards(episodeResults) {
+  const predatorAvgRewards = episodeResults.map(
+    (result) => result.predatorTotalReward / result.stepCount
+  );
+  const preyAvgRewards = episodeResults.map(
+    (result) => result.preyTotalReward / result.stepCount
+  );
+
+  const tracePredator = {
+    x: Array.from({ length: episodeResults.length }, (_, i) => i + 1),
+    y: predatorAvgRewards,
+    mode: 'lines',
+    name: 'Predator',
+  };
+
+  const tracePrey = {
+    x: Array.from({ length: episodeResults.length }, (_, i) => i + 1),
+    y: preyAvgRewards,
+    mode: 'lines',
+    name: 'Prey',
+  };
+
+  const layout = {
+    title: 'Average Reward per Episode',
+    xaxis: { title: 'Episode' },
+    yaxis: { title: 'Average Reward' },
+  };
+
+  Plotly.newPlot('rewards-plot', [tracePredator, tracePrey], layout);
+}
+
+function plotStepsPerEpisode(episodeResults) {
+  const stepsPerEpisode = episodeResults.map((result) => result.stepCount);
+
+  const trace = {
+    x: Array.from({ length: episodeResults.length }, (_, i) => i + 1),
+    y: stepsPerEpisode,
+    mode: 'lines',
+    name: 'Steps',
+  };
+
+  const layout = {
+    title: 'Number of Steps per Episode',
+    xaxis: { title: 'Episode' },
+    yaxis: { title: 'Steps' },
+  };
+
+  Plotly.newPlot('steps-plot', [trace], layout);
+}
+
+function plotMaxQValues(qValues) {
+  const maxQValues = qValues.map((qTable) => {
+    let maxQ = -Infinity;
+    for (const state in qTable) {
+      for (const action in qTable[state]) {
+        maxQ = Math.max(maxQ, qTable[state][action]);
+      }
+    }
+    return maxQ;
+  });
+
+  const trace = {
+    x: Array.from({ length: qValues.length }, (_, i) => i + 1),
+    y: maxQValues,
+    mode: 'lines',
+    name: 'Max Q-value',
+  };
+
+  const layout = {
+    title: 'Maximum Q-value over Time',
+    xaxis: { title: 'Time' },
+    yaxis: { title: 'Max Q-value' },
+  };
+
+  Plotly.newPlot('qvalues-plot', [trace], layout);
+}
+
+function updateDots(agentData, type) {
+  const existingDots = document.querySelectorAll(`.${type}`);
+
+  // Remove extra dots if there are more on the DOM than in the new data
+  for (let i = agentData.length; i < existingDots.length; i++) {
+    existingDots[i].remove();
+  }
+
+  agentData.forEach((agent, index) => {
+    let dotElement;
+
+    if (index < existingDots.length) {
+      // Update the position of an existing dot
+      dotElement = existingDots[index];
+      moveDot(dotElement, agent.x, agent.y);
+    } else {
+      // Create a new dot if there are fewer on the DOM than in the new data
+      dotElement = createDot(agent.x, agent.y, type);
+    }
+  });
+}
+
+function createDot(x, y, type) {
+  const dotElement = document.createElement('div');
+  dotElement.id = `${type}-${Date.now()}`;
+  dotElement.className = type;
+
+  dotElement.style.width = `${agentSize}px`;
+  dotElement.style.height = `${agentSize}px`;
+  dotElement.style.borderRadius = '100%';
+  dotElement.style.position = 'absolute';
+
+  gridEl.appendChild(dotElement);
+
+  if (type !== 'obstacle') {
+    moveDot(dotElement, x, y);
+  } else {
+    dotElement.style.borderRadius = '20%';
+    // Set obstacle position without animation
+    moveDot(dotElement, x, y, false);
+  }
+
+  const cellSize = Math.min(window.innerWidth, window.innerHeight) / gridSize;
+  dotElement.style.transform = `translate(${x * cellSize}px, ${
+    y * cellSize
+  }px)`;
+
+  return dotElement;
+}
+
+function moveDot(dot, x, y, animate = true) {
+  const cellSize = Math.min(window.innerWidth, window.innerHeight) / gridSize;
+
+  if (animate) {
+    gsap.to(dot, {
+      duration: 2, // Animation duration
+      x: x * cellSize, // Compute X position
+      y: y * cellSize, // Compute Y position
+      ease: 'sine.inOut', // Animation easing function
+    });
+  } else {
+    dot.style.transform = `translate(${x * cellSize}px, ${y * cellSize}px)`;
+  }
+}
+
+function generateEmptyCells() {
+  for (let i = 0; i < gridSize * gridSize; i++) {
+    const gridCell = document.createElement('div');
+    gridCell.className = 'grid-cell';
+    gridEl.appendChild(gridCell);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  generateEmptyCells();
+});
+
+---
+
+<!-- public/index.html -->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Predator-Prey Simulation</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      #container {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+        padding: 20px;
+        bottom: 0;
+      }
+
+      #grid {
+        position: absolute;
+        top: 0;
+        left: 0;
+        display: grid;
+        grid-template-columns: repeat(50, 1fr);
+        grid-template-rows: repeat(50, 1fr);
+        gap: 1px;
+        width: 100vw;
+        height: 100vh;
+        border: 1px solid black;
+        box-sizing: border-box;
+        min-height: calc(
+          100% - 320px
+        ); /* 320px = plot height + bottom margin */
+      }
+
+      #plots {
+        display: grid;
+        grid-template-rows: repeat(3, 1fr);
+        grid-column-start: 2;
+        gap: 20px;
+        padding: 20px;
+        bottom: 0;
+      }
+
+      #rewards-plot,
+      #steps-plot,
+      #qvalues-plot {
+        max-height: 300px;
+      }
+
+      .obstacle {
+        background-color: gray;
+      }
+
+      .predator {
+        background-color: red;
+      }
+      .prey {
+        background-color: blue;
+      }
+      .grid-cell {
+        background-color: white;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <div id="grid">
+        <!-- Empty cells to create grid structure -->
+        <div class="grid-cell"></div>
+      </div>
+
+      <!-- Add a div for plots -->
+      <div id="plots">
+        <div id="rewards-plot"></div>
+        <div id="steps-plot"></div>
+        <div id="qvalues-plot"></div>
+      </div>
+    </div>
+    <script src="script.js"></script>
+  </body>
+</html>

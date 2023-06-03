@@ -20,7 +20,9 @@ class Predator extends Agent {
   }
 
   chooseAction(state) {
-    return super.chooseAction(state, 1.4);
+    const temp = Math.max(1.4 - this.stepCount / 10000, 0.1);
+
+    return super.chooseAction(state, temp);
   }
 
   getReward(preyState) {

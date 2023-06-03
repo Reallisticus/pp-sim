@@ -1,31 +1,31 @@
 //simulation.js
 
-const Predator = require('./agents/predator');
-const Prey = require('./agents/prey');
-const Grid = require('./environment/grid');
-const Monitoring = require('./utils/monitoring');
+const Predator = require('../agents/predator');
+const Prey = require('../agents/prey');
+const Grid = require('../environment/grid');
+const Monitoring = require('../monitoring/monitoring');
+const config = require('../config');
 
-const MAX_STEPS_PER_EPISODE = 10000;
+const MAX_STEPS_PER_EPISODE = config.MAX_STEPS_PER_EPISODE;
 
 // Create a new grid
-const grid = new Grid(50);
+const grid = new Grid(config.gridSize);
 const monitoring = new Monitoring();
 
 let predatorTotalReward = 0;
 let preyTotalReward = 0;
-let predatorStepCount = 0;
-let preyStepCount = 0;
 let stepCount = 0;
 let episodeCount = 0;
-let collisionRewardPredator = 100;
-let collisionRewardPrey = -100;
 
-const nrOfObstacles = 25;
+let collisionRewardPredator = config.collisionRewardPredator;
+let collisionRewardPrey = config.collisionRewardPrey;
+
+const nrOfObstacles = config.nrOfObstacles;
 
 const predators = [];
 const preys = [];
 
-for (let i = 0; i < 50; i++) {
+for (let i = 0; i < config.nrOfPredators; i++) {
   predators.push(new Predator(null, null, grid));
   preys.push(new Prey(null, null, grid));
 }
@@ -47,6 +47,7 @@ function shuffleArray(array) {
 
 function resetPositions() {
   monitoring.logEpisodeResults(predatorTotalReward, preyTotalReward, stepCount);
+  monitoring.logQValues(testingPredator.qTable);
   predatorTotalReward = 0;
   preyTotalReward = 0;
   stepCount = 0;
@@ -80,43 +81,21 @@ function runStep(predator, prey) {
 
   const isCaught = grid.isCollision(predator.x, predator.y, prey.x, prey.y);
 
-  // console.log(`Prey Reward: ${preyReward}`);
-  // console.log(`Prey Step Count: ${preyStepCount}`);
-
-  predatorStepCount++;
-  preyStepCount++;
-
-  predatorTotalReward += predatorReward;
-  preyTotalReward += preyReward;
-
-  if (isCaught) {
-    predatorTotalReward += collisionRewardPredator;
-    preyTotalReward += collisionRewardPrey;
-  }
-
   if (isCaught || stepCount >= MAX_STEPS_PER_EPISODE) {
     episodeCount++;
-    const totalCount = predatorStepCount + preyStepCount;
-    const totalPredatorAvgReward = predatorTotalReward / predatorStepCount;
-    const totalPreyAvgReward = preyTotalReward / preyStepCount;
 
-    // console.log(`Episode: ${episodeCount}`);
-    // console.log(`Predator: { x: ${predator.x}, y: ${predator.y} }`);
-    // console.log(`Prey: { x: ${prey.x}, y: ${prey.y} }`);
-    // console.log(
-    //   `Predator - Total Reward: ${predatorTotalReward}, Average Reward per Step: ${totalPredatorAvgReward}`
-    // );
-    // console.log(
-    //   `Prey - Total Reward: ${preyTotalReward}, Average Reward per Step: ${totalPreyAvgReward}`
-    // );
-    // console.log(`Total Steps: ${totalCount}`);
+    predatorTotalReward += predatorReward;
+    preyTotalReward += preyReward;
 
-    predatorTotalReward = 0;
-    preyTotalReward = 0;
-    predatorStepCount = 0;
-    preyStepCount = 0;
-    stepCount = 0;
+    if (isCaught) {
+      predatorTotalReward += collisionRewardPredator;
+      preyTotalReward += collisionRewardPrey;
+    }
+
     resetPositions();
+  } else {
+    predatorTotalReward += predatorReward;
+    preyTotalReward += preyReward;
   }
 
   predator.updateQTable(

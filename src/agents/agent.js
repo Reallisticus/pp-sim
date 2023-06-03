@@ -7,7 +7,6 @@ class Agent {
       this.setPosition(x, y);
     }
     this.qTable = {};
-
     this.stepCount = 0;
   }
 
@@ -99,19 +98,19 @@ class Agent {
     const actions = this.getActions();
 
     if (!this.qTable[stateStr]) {
-      // Choose a random action with 10% probability, or if we haven't seen this state before
-      return actions[Math.floor(Math.random() * actions.length)];
-    } else {
-      const actionProbabilities = this.calculateActionProbabilities(
-        stateStr,
-        actions,
-        temp
-      );
-      return this.selectActionBasedOnProbabilities(
-        actions,
-        actionProbabilities
-      );
+      // Initialize the qTable for all possible actions with 0 values
+      this.qTable[stateStr] = {};
+      actions.forEach((action) => {
+        this.qTable[stateStr][action] = 0;
+      });
     }
+
+    const actionProbabilities = this.calculateActionProbabilities(
+      stateStr,
+      actions,
+      temp
+    );
+    return this.selectActionBasedOnProbabilities(actions, actionProbabilities);
   }
 
   calculateActionProbabilities(stateStr, actions, temp) {

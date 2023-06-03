@@ -8,7 +8,7 @@ const server = http.createServer(app);
 const io = socketIo(server);
 const port = 3000;
 
-const simulation = require('./simulation');
+const simulation = require('../simulation/simulation');
 
 app.use(express.static('public'));
 

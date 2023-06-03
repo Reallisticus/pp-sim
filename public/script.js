@@ -5,8 +5,7 @@ const gridEl = document.getElementById('grid');
 
 const gridSize = 50;
 
-const agentSize =
-  Math.min(window.innerWidth, window.innerHeight) / gridSize - 3;
+const agentSize = 10;
 
 socket.on('data', (data) => {
   console.log(data);

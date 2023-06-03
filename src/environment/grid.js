@@ -2,7 +2,6 @@
 class Grid {
   constructor(size) {
     this.size = size;
-
     this.obstacles = [];
   }
 
@@ -29,7 +28,7 @@ class Grid {
     let position;
     let isOccupied;
 
-    do {
+    while (true) {
       position = {
         x: Math.floor(Math.random() * this.size),
         y: Math.floor(Math.random() * this.size),
@@ -39,7 +38,11 @@ class Grid {
         this.isObstacle(position.x, position.y) ||
         this.predators.some((p) => p.x === position.x && p.y === position.y) ||
         this.preys.some((p) => p.x === position.x && p.y === position.y);
-    } while (isOccupied);
+
+      if (!isOccupied) {
+        break;
+      }
+    }
 
     return position;
   }
