@@ -1,0 +1,11 @@
+Priorities -
+
+1) Monitoring - we need to understand what is going on in order to be able to adjust things
+
+2) Predator-Prey are currently kind of coupled I believe? Examine this, find out if this is true, if it is go to step 3)
+
+3) FOV, if the PP's are "coupled", we need to remove the coupling and make every other dot that is within a specific FOV visible.
+
+4) The FOV should be different, predators have eyes in front of the head and see in more "narrowly" but further away, prey on the other hand, see a bigger radius, but not so far away.
+
+5) Storing the results of the simulation? Currently if we stop it, we're fucked?

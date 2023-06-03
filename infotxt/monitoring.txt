@@ -1,0 +1,11 @@
+1. **Plot the average reward per episode**: Instead of just printing the average reward per step, you can plot the average reward per episode for both predators and preys. This will help you visualize how the rewards are changing over time and whether the AI is learning to maximize its rewards.
+
+2. **Plot the number of steps per episode**: By plotting the number of steps taken in each episode, you can see if the agents are learning to catch or escape more efficiently over time. A decreasing trend in the number of steps per episode could indicate that the agents are learning better strategies.
+
+3. **Track and plot the Q-values**: Monitoring the Q-values in the Q-table can give you insights into how the AI's understanding of the environment is evolving. You can track the maximum Q-value for each state and plot it over time to see if the AI is converging on an optimal policy.
+
+4. **Visualize the learned policy**: To better understand the strategies learned by the AI, you can visualize the learned policy by showing the best action for each state in a grid. This can help you see if the AI is learning reasonable strategies for catching or escaping.
+
+5. **Test the learned policy**: Periodically test the learned policy by running episodes without any exploration (i.e., always choosing the action with the highest Q-value). This will give you an idea of how well the AI is performing with its current knowledge.
+
+To implement these monitoring techniques, you can use libraries like [matplotlib](https://matplotlib.org/) or [plotly](https://plotly.com/javascript/) for plotting graphs and visualizations. You may also want to store the metrics in a file or a database for further analysis.
