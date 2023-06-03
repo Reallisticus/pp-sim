@@ -19,7 +19,8 @@ class Prey extends Agent {
     const wrappedDx = Math.min(dx, this.grid.size - dx);
     const wrappedDy = Math.min(dy, this.grid.size - dy);
     const distance = Math.sqrt(Math.pow(wrappedDx, 2) + Math.pow(wrappedDy, 2));
-    return distance;
+    const rewardFactor = 1.5; // Adjust this value to change the reward scaling
+    return Math.pow(distance, rewardFactor);
   }
 }
 

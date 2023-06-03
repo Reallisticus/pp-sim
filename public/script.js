@@ -3,9 +3,11 @@
 const socket = io();
 const gridEl = document.getElementById('grid');
 
-const gridSize = 50;
-
 const agentSize = 10;
+
+const updateInterval = 10; // Update the plots every 10 data points
+let dataPointsReceived = 0;
+let config;
 
 socket.on('data', (data) => {
   console.log(data);
@@ -13,9 +15,14 @@ socket.on('data', (data) => {
   updateDots(data.predators, 'predator');
   updateDots(data.preys, 'prey');
 
-  plotAverageRewards(data.monitoring.episodeResults);
-  plotStepsPerEpisode(data.monitoring.episodeResults);
-  plotMaxQValues(data.monitoring.qValues);
+  dataPointsReceived++;
+
+  if (dataPointsReceived >= updateInterval) {
+    plotAverageRewards(data.monitoring.episodeResults);
+    plotStepsPerEpisode(data.monitoring.episodeResults);
+    plotMaxQValues(data.monitoring.qValues);
+    dataPointsReceived = 0;
+  }
 });
 
 function plotAverageRewards(episodeResults) {
@@ -137,7 +144,8 @@ function createDot(x, y, type) {
     moveDot(dotElement, x, y, false);
   }
 
-  const cellSize = Math.min(window.innerWidth, window.innerHeight) / gridSize;
+  const cellSize =
+    Math.min(window.innerWidth, window.innerHeight) / config.gridSize;
   dotElement.style.transform = `translate(${x * cellSize}px, ${
     y * cellSize
   }px)`;
@@ -146,7 +154,8 @@ function createDot(x, y, type) {
 }
 
 function moveDot(dot, x, y, animate = true) {
-  const cellSize = Math.min(window.innerWidth, window.innerHeight) / gridSize;
+  const cellSize =
+    Math.min(window.innerWidth, window.innerHeight) / config.gridSize;
 
   if (animate) {
     gsap.to(dot, {
@@ -161,13 +170,24 @@ function moveDot(dot, x, y, animate = true) {
 }
 
 function generateEmptyCells() {
-  for (let i = 0; i < gridSize * gridSize; i++) {
+  // Clear the grid
+  gridEl.innerHTML = '';
+
+  // Generate new cells based on the gridSize from the config
+  for (let i = 0; i < config.gridSize * config.gridSize; i++) {
     const gridCell = document.createElement('div');
     gridCell.className = 'grid-cell';
     gridEl.appendChild(gridCell);
   }
+
+  // Update the grid template columns and rows
+  gridEl.style.gridTemplateColumns = `repeat(${config.gridSize}, 1fr)`;
+  gridEl.style.gridTemplateRows = `repeat(${config.gridSize}, 1fr)`;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  generateEmptyCells();
-});
+fetch('/config')
+  .then((response) => response.json())
+  .then((data) => {
+    config = data;
+    generateEmptyCells();
+  });

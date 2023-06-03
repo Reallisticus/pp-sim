@@ -48,6 +48,19 @@ class Agent {
     );
   }
 
+  getActions() {
+    return [
+      'up',
+      'down',
+      'left',
+      'right',
+      'up-left',
+      'up-right',
+      'down-left',
+      'down-right',
+    ];
+  }
+
   calculateDistance(x1, y1, x2, y2) {
     const dx = Math.abs(x1 - x2);
     const dy = Math.abs(y1 - y2);
@@ -73,6 +86,22 @@ class Agent {
       case 'right':
         newX = (this.x + 1) % this.grid.size;
         break;
+      case 'up-left':
+        newX = (this.x - 1 + this.grid.size) % this.grid.size;
+        newY = (this.y - 1 + this.grid.size) % this.grid.size;
+        break;
+      case 'up-right':
+        newX = (this.x + 1) % this.grid.size;
+        newY = (this.y - 1 + this.grid.size) % this.grid.size;
+        break;
+      case 'down-left':
+        newX = (this.x - 1 + this.grid.size) % this.grid.size;
+        newY = (this.y + 1) % this.grid.size;
+        break;
+      case 'down-right':
+        newX = (this.x + 1) % this.grid.size;
+        newY = (this.y + 1) % this.grid.size;
+        break;
     }
 
     if (this.grid.isValidMove(newX, newY)) {
@@ -83,10 +112,6 @@ class Agent {
 
   getState() {
     return { x: this.x, y: this.y };
-  }
-
-  getActions() {
-    return ['up', 'down', 'left', 'right'];
   }
 
   stateToString(state) {
@@ -114,10 +139,20 @@ class Agent {
   }
 
   calculateActionProbabilities(stateStr, actions, temp) {
-    return actions.map((action) => {
+    const rawProbabilities = actions.map((action) => {
       const qValue = this.qTable[stateStr][action] || 0;
       return Math.exp(qValue / temp);
     });
+
+    // Calculate the sum of raw probabilities
+    const sumProbabilities = rawProbabilities.reduce((a, b) => a + b, 0);
+
+    // Normalize the probabilities by dividing each probability by the sum of all probabilities
+    const normalizedProbabilities = rawProbabilities.map((probability) => {
+      return probability / sumProbabilities;
+    });
+
+    return normalizedProbabilities;
   }
 
   selectActionBasedOnProbabilities(actions, probabilities) {

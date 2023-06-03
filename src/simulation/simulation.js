@@ -4,7 +4,7 @@ const Predator = require('../agents/predator');
 const Prey = require('../agents/prey');
 const Grid = require('../environment/grid');
 const Monitoring = require('../monitoring/monitoring');
-const config = require('../config');
+const config = require('./config');
 
 const MAX_STEPS_PER_EPISODE = config.MAX_STEPS_PER_EPISODE;
 
@@ -38,12 +38,15 @@ grid.setPredatorsAndPreys(predators, preys);
 grid.placePredators(predators);
 grid.placePreys(preys);
 
-function shuffleArray(array) {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-}
+//Knuth algortihm, ensuring that each permutation of the array elements has an equal probability of appearance.
+//Not needed currently, but might be useful in the future
+
+// function shuffleArray(array) {
+//   for (let i = array.length - 1; i > 0; i--) {
+//     const j = Math.floor(Math.random() * (i + 1));
+//     [array[i], array[j]] = [array[j], array[i]];
+//   }
+// }
 
 function resetPositions() {
   monitoring.logEpisodeResults(predatorTotalReward, preyTotalReward, stepCount);
@@ -51,8 +54,6 @@ function resetPositions() {
   predatorTotalReward = 0;
   preyTotalReward = 0;
   stepCount = 0;
-  shuffleArray(predators);
-  shuffleArray(preys);
 
   grid.placePredators(predators);
   grid.placePreys(preys);
@@ -105,11 +106,9 @@ function runStep(predator, prey) {
     predator.getState()
   );
   prey.updateQTable(prey.getState(), preyAction, preyReward, prey.getState());
-
-  return { predatorReward, preyReward };
 }
 
-function startSimulation(io, socket) {
+async function startSimulation(io, socket) {
   socket.emit('data', {
     predators: predators.map(({ x, y }) => ({ x, y })),
     preys: preys.map(({ x, y }) => ({ x, y })),
@@ -120,12 +119,12 @@ function startSimulation(io, socket) {
     },
   });
 
-  setInterval(() => {
+  while (true) {
     console.log(`Episode: ${episodeCount}`);
 
     predators.forEach((predator) => {
       preys.forEach((prey) => {
-        const { predatorReward, preyReward } = runStep(predator, prey);
+        runStep(predator, prey);
       });
     });
 
@@ -140,7 +139,10 @@ function startSimulation(io, socket) {
         qValues: monitoring.qValues,
       },
     });
-  }, 2000);
+
+    // Wait for 2000 milliseconds before running the next iteration
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
 }
 
 module.exports = { startSimulation };
