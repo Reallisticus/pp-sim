@@ -10,6 +10,7 @@ class Agent {
     }
     this.qTable = {};
     this.stepCount = 0;
+    this.fieldOfView = this.fieldOfView || 360;
   }
 
   setPosition(x, y) {
@@ -133,7 +134,7 @@ class Agent {
       otherAgent.y
     );
 
-    // Calculate the angle between predator and prey
+    // Calculate the angle between agent and otherAgent
     const angle =
       Math.atan2(otherAgent.y - this.y, otherAgent.x - this.x) *
       (180 / Math.PI);
@@ -141,10 +142,10 @@ class Agent {
     // Normalize the angle to be between 0 and 360
     const normalizedAngle = (angle + 360) % 360;
 
-    // Check if the angle is within the field of view
+    // Check if normalizedAngle is within the field of view
     const halfFOV = this.fieldOfView / 2;
-    const lowerBound = (this.direction - halfFOV + 360) % 360;
-    const upperBound = (this.direction + halfFOV) % 360;
+    const lowerBound = (normalizedAngle - halfFOV + 360) % 360;
+    const upperBound = (normalizedAngle + halfFOV) % 360;
 
     const isWithinFOV =
       (lowerBound < upperBound &&
@@ -153,21 +154,19 @@ class Agent {
       (lowerBound > upperBound &&
         (normalizedAngle >= lowerBound || normalizedAngle <= upperBound));
 
-    if (distance <= this.visionRange && isWithinFOV) {
-      const linePoints = bresenhamLine(
-        this.x,
-        this.y,
-        otherAgent.x,
-        otherAgent.y
-      );
-
-      // Check if there's a direct line of sight without any obstacles
-      return !linePoints.some((point) =>
-        this.grid.isObstacle(point.x, point.y)
-      );
+    if (distance > this.visionRange || !isWithinFOV) {
+      return false;
     }
 
-    return false;
+    const linePoints = bresenhamLine(
+      this.x,
+      this.y,
+      otherAgent.x,
+      otherAgent.y
+    );
+
+    // Check if there's a direct line of sight without any obstacles
+    return !linePoints.some((point) => this.grid.isObstacle(point.x, point.y));
   }
 
   getState() {
@@ -181,7 +180,6 @@ class Agent {
   chooseAction(state, temp) {
     const stateStr = this.stateToString(state);
     const actions = this.getActions();
-
     if (!this.qTable[stateStr]) {
       // Initialize the qTable for all possible actions with 0 values
       this.qTable[stateStr] = {};
@@ -198,10 +196,23 @@ class Agent {
     return this.selectActionBasedOnProbabilities(actions, actionProbabilities);
   }
 
-  calculateActionProbabilities(stateStr, actions, temp) {
-    const rawProbabilities = actions.map((action) => {
+  calculateActionProbabilities(stateStr, actions, temp, heuristics = []) {
+    // Initialize the qTable for the state if not already initialized
+    if (!this.qTable[stateStr]) {
+      this.qTable[stateStr] = {};
+      actions.forEach((action) => {
+        this.qTable[stateStr][action] = 0;
+      });
+    }
+
+    const maxQValue = Math.max(
+      ...actions.map((action) => this.qTable[stateStr][action])
+    );
+
+    const rawProbabilities = actions.map((action, index) => {
       const qValue = this.qTable[stateStr][action] || 0;
-      return Math.exp(qValue / temp);
+      const heuristicValue = heuristics[index] || 0;
+      return Math.exp((qValue + heuristicValue - maxQValue) / temp);
     });
 
     // Calculate the sum of raw probabilities

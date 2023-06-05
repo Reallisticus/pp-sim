@@ -8,6 +8,7 @@ class Predator extends Agent {
     this.qTable = {};
     this.history = [];
     this.preys = preys;
+    this.visionRange = 5;
   }
 
   chooseAction(state) {
@@ -15,6 +16,8 @@ class Predator extends Agent {
     const visibleObstacles = this.grid.obstacles.filter((obstacle) =>
       this.canSee({ x: obstacle.x, y: obstacle.y })
     );
+
+    const actions = this.getActions();
 
     // If no visible preys, choose a random action
     if (visiblePreys.length === 0) {
@@ -38,40 +41,45 @@ class Predator extends Agent {
       return currentDistance < closestDistance ? current : closest;
     });
 
-    // Calculate the distance to the closest prey for each action
-    const actions = this.getActions();
-    const distancesAfterActions = actions.map((action) => {
+    // Calculate heuristic values for each action
+    const heuristicValues = actions.map((action) => {
       const { x: newX, y: newY } = this.getNewPositionAfterAction(action);
-      return this.calculateDistance(newX, newY, closestPrey.x, closestPrey.y);
-    });
 
-    // Calculate the distance to the closest obstacle for each action
-    const obstacleDistancesAfterActions = actions.map((action) => {
-      const { x: newX, y: newY } = this.getNewPositionAfterAction(action);
-      return Math.min(
+      const distanceToPrey = this.calculateDistance(
+        newX,
+        newY,
+        closestPrey.x,
+        closestPrey.y
+      );
+      const distanceToClosestObstacle = Math.min(
         ...visibleObstacles.map((obstacle) =>
           this.calculateDistance(newX, newY, obstacle.x, obstacle.y)
         )
       );
+
+      const preyHeuristicFactor = -1.5; // Adjust this value to change the prey heuristic scaling
+      const obstacleHeuristicFactor = 0.5; // Adjust this value to change the obstacle heuristic scaling
+      const minObstacleDistance = 1; // Adjust this value to set the minimum allowed distance to an obstacle
+
+      const preyHeuristic = preyHeuristicFactor * distanceToPrey;
+      const obstacleHeuristic =
+        distanceToClosestObstacle < minObstacleDistance
+          ? obstacleHeuristicFactor * distanceToClosestObstacle
+          : 0;
+
+      return preyHeuristic + obstacleHeuristic;
     });
 
-    // Filter out actions that would move the predator too close to an obstacle
-    const minObstacleDistance = 1; // Adjust this value to set the minimum allowed distance to an obstacle
-    const validActions = actions.filter(
-      (_, index) => obstacleDistancesAfterActions[index] > minObstacleDistance
+    const stateStr = this.stateToString(state);
+    const temp = Math.max(1.4 - this.stepCount / 10000, 0.1);
+    const actionProbabilities = this.calculateActionProbabilities(
+      stateStr,
+      actions,
+      temp,
+      heuristicValues
     );
 
-    // Choose the best action to move closer to the prey while avoiding obstacles
-    const bestAction = validActions.reduce((best, current) => {
-      const bestIndex = actions.indexOf(best);
-      const currentIndex = actions.indexOf(current);
-      return distancesAfterActions[bestIndex] <
-        distancesAfterActions[currentIndex]
-        ? best
-        : current;
-    });
-
-    return bestAction;
+    return this.selectActionBasedOnProbabilities(actions, actionProbabilities);
   }
 
   getNewPositionAfterAction(action) {

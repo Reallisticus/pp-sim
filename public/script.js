@@ -10,99 +10,12 @@ let dataPointsReceived = 0;
 let config;
 
 socket.on('data', (data) => {
-  console.log(data);
   updateDots(data.obstacles, 'obstacle');
-  updateDots(data.predators, 'predator');
-  updateDots(data.preys, 'prey');
-
-  dataPointsReceived++;
-
-  if (dataPointsReceived >= updateInterval) {
-    plotAverageRewards(data.monitoring.episodeResults);
-    plotStepsPerEpisode(data.monitoring.episodeResults);
-    plotMaxQValues(data.monitoring.qValues);
-    dataPointsReceived = 0;
-  }
+  updateDots(data.predators, 'predator', data.visiblePreysForPredators);
+  updateDots(data.preys, 'prey', data.visiblePredatorsForPreys);
 });
 
-function plotAverageRewards(episodeResults) {
-  const predatorAvgRewards = episodeResults.map(
-    (result) => result.predatorTotalReward / result.stepCount
-  );
-  const preyAvgRewards = episodeResults.map(
-    (result) => result.preyTotalReward / result.stepCount
-  );
-
-  const tracePredator = {
-    x: Array.from({ length: episodeResults.length }, (_, i) => i + 1),
-    y: predatorAvgRewards,
-    mode: 'lines',
-    name: 'Predator',
-  };
-
-  const tracePrey = {
-    x: Array.from({ length: episodeResults.length }, (_, i) => i + 1),
-    y: preyAvgRewards,
-    mode: 'lines',
-    name: 'Prey',
-  };
-
-  const layout = {
-    title: 'Average Reward per Episode',
-    xaxis: { title: 'Episode' },
-    yaxis: { title: 'Average Reward' },
-  };
-
-  Plotly.newPlot('rewards-plot', [tracePredator, tracePrey], layout);
-}
-
-function plotStepsPerEpisode(episodeResults) {
-  const stepsPerEpisode = episodeResults.map((result) => result.stepCount);
-
-  const trace = {
-    x: Array.from({ length: episodeResults.length }, (_, i) => i + 1),
-    y: stepsPerEpisode,
-    mode: 'lines',
-    name: 'Steps',
-  };
-
-  const layout = {
-    title: 'Number of Steps per Episode',
-    xaxis: { title: 'Episode' },
-    yaxis: { title: 'Steps' },
-  };
-
-  Plotly.newPlot('steps-plot', [trace], layout);
-}
-
-function plotMaxQValues(qValues) {
-  const maxQValues = qValues.map((qTable) => {
-    let maxQ = -Infinity;
-    for (const state in qTable) {
-      for (const action in qTable[state]) {
-        maxQ = Math.max(maxQ, qTable[state][action]);
-      }
-    }
-    return maxQ;
-  });
-
-  const trace = {
-    x: Array.from({ length: qValues.length }, (_, i) => i + 1),
-    y: maxQValues,
-    mode: 'lines',
-    name: 'Max Q-value',
-  };
-
-  const layout = {
-    title: 'Maximum Q-value over Time',
-    xaxis: { title: 'Time' },
-    yaxis: { title: 'Max Q-value' },
-  };
-
-  Plotly.newPlot('qvalues-plot', [trace], layout);
-}
-
-function updateDots(agentData, type) {
+function updateDots(agentData, type, visibilityData) {
   const existingDots = document.querySelectorAll(`.${type}`);
 
   // Remove extra dots if there are more on the DOM than in the new data
@@ -120,6 +33,12 @@ function updateDots(agentData, type) {
     } else {
       // Create a new dot if there are fewer on the DOM than in the new data
       dotElement = createDot(agent.x, agent.y, type);
+    }
+
+    if (visibilityData) {
+      dotElement.style.opacity = visibilityData[index] ? 1 : 0.3;
+    } else {
+      dotElement.style.opacity = 1;
     }
   });
 }

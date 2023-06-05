@@ -13,5 +13,3 @@ Here's a high-level overview of how the simulation works:
 5. The script.js file handles the visualization of the simulation in the browser using socket.io to receive data from the server and GSAP for animations.
 
 6. The index.html file sets up the structure of the web page and includes necessary styles for displaying the grid, predators, and preys.
-
-In summary, this simulation demonstrates how reinforcement learning can be used to model predator-prey interactions in a 2D grid environment. Predators learn to chase preys while preys learn to avoid predators using Q-Learning Algorithm.

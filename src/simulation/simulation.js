@@ -27,7 +27,7 @@ const preys = [];
 
 for (let i = 0; i < config.nrOfPredators; i++) {
   predators.push(new Predator(null, null, grid, preys));
-  preys.push(new Prey(null, null, grid));
+  preys.push(new Prey(null, null, grid, predators));
 }
 
 // Rely on placePredators and placePreys methods to set positions
@@ -74,8 +74,34 @@ function runStep(predator, prey) {
   const preyAction = prey.chooseAction(prey.getState());
   prey.move(preyAction);
 
-  const predatorReward = predator.getReward(prey.getState());
-  const preyReward = prey.getReward(predator.getState());
+  const predatorVisibleObstacles = grid.obstacles.filter((obstacle) => {
+    predator.canSee({ x: obstacle.x, y: obstacle.y });
+  });
+
+  const predatorReward = predator.getReward(
+    prey.getState(),
+    predatorVisibleObstacles
+  );
+
+  const preyVisibleObstacles = grid.obstacles.filter((obstacle) => {
+    prey.canSee({ x: obstacle.x, y: obstacle.y });
+  });
+
+  const preyReward = prey.getReward(predator.getState(), preyVisibleObstacles);
+
+  // if (prey.canSee(predator)) {
+  //   console.log(
+  //     `Prey at (${prey.x}, ${prey.y}) can see prey at (${predator.x}, ${predator.y})`
+  //   );
+  // }
+
+  console.log(episodeCount);
+
+  // if (predator.canSee(prey)) {
+  //   console.log(
+  //     `Predator at (${predator.x}, ${predator.y}) can see prey at (${prey.x}, ${prey.y})`
+  //   );
+  // }
 
   const isCaught = grid.isCollision(predator.x, predator.y, prey.x, prey.y);
 

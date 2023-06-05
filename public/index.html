@@ -32,8 +32,6 @@
         top: 0;
         left: 0;
         display: grid;
-        grid-template-columns: repeat(9, 1fr);
-        grid-template-rows: repeat(9, 1fr);
         gap: 1px;
         width: 100vw;
         height: 100vh;
@@ -42,21 +40,6 @@
         min-height: calc(
           100% - 320px
         ); /* 320px = plot height + bottom margin */
-      }
-
-      #plots {
-        display: grid;
-        grid-template-rows: repeat(3, 1fr);
-        grid-column-start: 2;
-        gap: 20px;
-        padding: 20px;
-        bottom: 0;
-      }
-
-      #rewards-plot,
-      #steps-plot,
-      #qvalues-plot {
-        max-height: 300px;
       }
 
       .obstacle {
@@ -75,18 +58,10 @@
     </style>
   </head>
   <body>
-    <div id="container">
-      <div id="grid">
-        <!-- Empty cells to create grid structure -->
-      </div>
-
-      <!-- Add a div for plots -->
-      <div id="plots">
-        <div id="rewards-plot"></div>
-        <div id="steps-plot"></div>
-        <div id="qvalues-plot"></div>
-      </div>
+    <div id="grid">
+      <!-- Empty cells to create grid structure -->
     </div>
+
     <script src="script.js"></script>
   </body>
 </html>

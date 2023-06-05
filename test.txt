@@ -1,21 +1,15 @@
-Here's our code.
+Okay, so we've just made changes to add some heuristic information to the Q-Learnign Algorithm.
+Namely, what we've changed is the canSee method, and the choseActions in the Predators and Preys.
 
-My folder structure is as follows:
+In the process of doing this, we've broken something, and now the dots are not moving.
 
-src/agents/agent.js
-src/agents/predator.js
-src/agents/prey.js
-src/environment/grid.js
-src/server/app.js
-src/monitoring/monitoring.js
-src/simulation/simulation.js
-src/simulation/config.js
-public/script.js
-public/index.html
+---
 
-----
+Here's our code:
 
 //agent.js
+
+const bresenhamLine = require('../helpers/bresenhamLine');
 
 class Agent {
   constructor(x, y, grid) {
@@ -25,6 +19,7 @@ class Agent {
     }
     this.qTable = {};
     this.stepCount = 0;
+    this.fieldOfView = this.fieldOfView || 360;
   }
 
   setPosition(x, y) {
@@ -148,7 +143,7 @@ class Agent {
       otherAgent.y
     );
 
-    // Calculate the angle between predator and prey
+    // Calculate the angle between agent and otherAgent
     const angle =
       Math.atan2(otherAgent.y - this.y, otherAgent.x - this.x) *
       (180 / Math.PI);
@@ -156,10 +151,10 @@ class Agent {
     // Normalize the angle to be between 0 and 360
     const normalizedAngle = (angle + 360) % 360;
 
-    // Check if the angle is within the field of view
+    // Check if normalizedAngle is within the field of view
     const halfFOV = this.fieldOfView / 2;
-    const lowerBound = (this.direction - halfFOV + 360) % 360;
-    const upperBound = (this.direction + halfFOV) % 360;
+    const lowerBound = (normalizedAngle - halfFOV + 360) % 360;
+    const upperBound = (normalizedAngle + halfFOV) % 360;
 
     const isWithinFOV =
       (lowerBound < upperBound &&
@@ -168,7 +163,19 @@ class Agent {
       (lowerBound > upperBound &&
         (normalizedAngle >= lowerBound || normalizedAngle <= upperBound));
 
-    return distance <= this.visionRange && isWithinFOV;
+    if (distance > this.visionRange || !isWithinFOV) {
+      return false;
+    }
+
+    const linePoints = bresenhamLine(
+      this.x,
+      this.y,
+      otherAgent.x,
+      otherAgent.y
+    );
+
+    // Check if there's a direct line of sight without any obstacles
+    return !linePoints.some((point) => this.grid.isObstacle(point.x, point.y));
   }
 
   getState() {
@@ -182,7 +189,6 @@ class Agent {
   chooseAction(state, temp) {
     const stateStr = this.stateToString(state);
     const actions = this.getActions();
-
     if (!this.qTable[stateStr]) {
       // Initialize the qTable for all possible actions with 0 values
       this.qTable[stateStr] = {};
@@ -191,18 +197,34 @@ class Agent {
       });
     }
 
+    const defaultHeuristics = new Array(actions.length).fill(0);
+
     const actionProbabilities = this.calculateActionProbabilities(
       stateStr,
       actions,
-      temp
+      temp,
+      defaultHeuristics
     );
     return this.selectActionBasedOnProbabilities(actions, actionProbabilities);
   }
 
-  calculateActionProbabilities(stateStr, actions, temp) {
-    const rawProbabilities = actions.map((action) => {
+  calculateActionProbabilities(stateStr, actions, temp, heuristics) {
+    // Initialize the qTable for the state if not already initialized
+    if (!this.qTable[stateStr]) {
+      this.qTable[stateStr] = {};
+      actions.forEach((action) => {
+        this.qTable[stateStr][action] = 0;
+      });
+    }
+
+    const maxQValue = Math.max(
+      ...actions.map((action) => this.qTable[stateStr][action])
+    );
+
+    const rawProbabilities = actions.map((action, index) => {
       const qValue = this.qTable[stateStr][action] || 0;
-      return Math.exp(qValue / temp);
+      const heuristicValue = heuristics[index] || 0;
+      return Math.exp((qValue + heuristicValue - maxQValue) / temp);
     });
 
     // Calculate the sum of raw probabilities
@@ -249,21 +271,29 @@ class Agent {
 
 module.exports = Agent;
 
-----
+---
+
 
 //predator.js
 
 const Agent = require('./agent');
 class Predator extends Agent {
-  constructor(x, y, grid) {
+  constructor(x, y, grid, preys) {
     super(x, y, grid);
     this.fieldOfView = 90;
     this.qTable = {};
     this.history = [];
+    this.preys = preys;
+    this.visionRange = 5;
   }
 
   chooseAction(state) {
     const visiblePreys = this.preys.filter((prey) => this.canSee(prey));
+    const visibleObstacles = this.grid.obstacles.filter((obstacle) =>
+      this.canSee({ x: obstacle.x, y: obstacle.y })
+    );
+
+    const actions = this.getActions();
 
     // If no visible preys, choose a random action
     if (visiblePreys.length === 0) {
@@ -287,22 +317,47 @@ class Predator extends Agent {
       return currentDistance < closestDistance ? current : closest;
     });
 
-    // Choose an action based on the closest visible prey
-    const deltaX = closestPrey.x - this.x;
-    const deltaY = closestPrey.y - this.y;
-
-    // Determine the best action for the predator to move closer to the prey
-    const actions = this.getActions();
-    const distancesAfterActions = actions.map((action) => {
+    // Calculate heuristic values for each action
+    const heuristicValues = actions.map((action) => {
       const { x: newX, y: newY } = this.getNewPositionAfterAction(action);
-      return this.calculateDistance(newX, newY, closestPrey.x, closestPrey.y);
+
+      const distanceToPrey = this.calculateDistance(
+        newX,
+        newY,
+        closestPrey.x,
+        closestPrey.y
+      );
+      const distanceToClosestObstacle = Math.min(
+        ...visibleObstacles.map((obstacle) =>
+          this.calculateDistance(newX, newY, obstacle.x, obstacle.y)
+        )
+      );
+
+      const preyHeuristicFactor = -1.5; // Adjust this value to change the prey heuristic scaling
+      const obstacleHeuristicFactor = 0.5; // Adjust this value to change the obstacle heuristic scaling
+      const minObstacleDistance = 1; // Adjust this value to set the minimum allowed distance to an obstacle
+
+      const preyHeuristic = preyHeuristicFactor * distanceToPrey;
+      const obstacleHeuristic =
+        distanceToClosestObstacle < minObstacleDistance
+          ? obstacleHeuristicFactor * distanceToClosestObstacle
+          : 0;
+
+      return preyHeuristic + obstacleHeuristic;
     });
 
-    const minDistanceIndex = distancesAfterActions.indexOf(
-      Math.min(...distancesAfterActions)
+    console.log(heuristicValues);
+
+    const stateStr = this.stateToString(state);
+    const temp = Math.max(1.4 - this.stepCount / 10000, 0.1);
+    const actionProbabilities = this.calculateActionProbabilities(
+      stateStr,
+      actions,
+      temp,
+      heuristicValues
     );
 
-    return actions[minDistanceIndex];
+    return this.selectActionBasedOnProbabilities(actions, actionProbabilities);
   }
 
   getNewPositionAfterAction(action) {
@@ -345,14 +400,33 @@ class Predator extends Agent {
 
   // ...
 
-  getReward(preyState) {
+  getReward(preyState, obstacleStates) {
     const dx = Math.abs(this.x - preyState.x);
     const dy = Math.abs(this.y - preyState.y);
     const wrappedDx = Math.min(dx, this.grid.size - dx);
     const wrappedDy = Math.min(dy, this.grid.size - dy);
-    const distance = Math.sqrt(Math.pow(wrappedDx, 2) + Math.pow(wrappedDy, 2));
+    const distanceToPrey = Math.sqrt(
+      Math.pow(wrappedDx, 2) + Math.pow(wrappedDy, 2)
+    );
+
+    // Calculate the distance to the closest obstacle
+    const distanceToClosestObstacle = Math.min(
+      ...obstacleStates.map((obstacle) =>
+        this.calculateDistance(this.x, this.y, obstacle.x, obstacle.y)
+      )
+    );
+
     const rewardFactor = 1.5; // Adjust this value to change the reward scaling
-    return -Math.pow(distance, rewardFactor);
+    const obstaclePenaltyFactor = 0.5; // Adjust this value to change the obstacle penalty scaling
+    const minObstacleDistance = 1; // Adjust this value to set the minimum allowed distance to an obstacle
+
+    const preyReward = -Math.pow(distanceToPrey, rewardFactor);
+    const obstaclePenalty =
+      distanceToClosestObstacle < minObstacleDistance
+        ? -Math.pow(distanceToClosestObstacle, obstaclePenaltyFactor)
+        : 0;
+
+    return preyReward + obstaclePenalty;
   }
 }
 
@@ -388,12 +462,9 @@ const predators = [];
 const preys = [];
 
 for (let i = 0; i < config.nrOfPredators; i++) {
-  predators.push(new Predator(null, null, grid));
-  preys.push(new Prey(null, null, grid));
+  predators.push(new Predator(null, null, grid, preys));
+  preys.push(new Prey(null, null, grid, predators));
 }
-
-const testingPredator = new Predator(null, null, grid);
-predators.push(testingPredator);
 
 // Rely on placePredators and placePreys methods to set positions
 grid.setPredatorsAndPreys(predators, preys);
@@ -411,9 +482,8 @@ grid.placePreys(preys);
 // }
 
 function resetPositions() {
-  console.log('resetting positions (episode count): ' + episodeCount);
   monitoring.logEpisodeResults(predatorTotalReward, preyTotalReward, stepCount);
-  monitoring.logQValues(testingPredator.qTable);
+  // monitoring.logQValues(testingPredator.qTable);
   predatorTotalReward = 0;
   preyTotalReward = 0;
   stepCount = 0;
@@ -434,15 +504,50 @@ for (let i = 0; i < nrOfObstacles; i++) {
 }
 
 function runStep(predator, prey) {
-  console.log('Running step: ' + stepCount);
   const predatorAction = predator.chooseAction(predator.getState());
   predator.move(predatorAction);
 
   const preyAction = prey.chooseAction(prey.getState());
   prey.move(preyAction);
 
-  const predatorReward = predator.getReward(prey.getState());
-  const preyReward = prey.getReward(predator.getState());
+  const predatorVisibleObstacles = grid.obstacles.filter((obstacle) => {
+    predator.canSee({ x: obstacle.x, y: obstacle.y });
+  });
+
+  const predatorReward = predator.getReward(
+    prey.getState(),
+    predatorVisibleObstacles
+  );
+
+  const preyVisibleObstacles = grid.obstacles.filter((obstacle) => {
+    prey.canSee({ x: obstacle.x, y: obstacle.y });
+  });
+
+  const preyReward = prey.getReward(predator.getState(), preyVisibleObstacles);
+
+  if (predator.canSee(prey)) {
+    console.log(
+      `Predator at (${predator.x}, ${predator.y}) can see prey at (${prey.x}, ${prey.y})`
+    );
+  }
+
+  if (prey.canSee(predator)) {
+    console.log(
+      `Prey at (${prey.x}, ${prey.y}) can see prey at (${predator.x}, ${predator.y})`
+    );
+  }
+
+  if (predator.canSee(prey)) {
+    console.log(
+      `Predator at (${predator.x}, ${predator.y}) can see prey at (${prey.x}, ${prey.y})`
+    );
+  }
+
+  // do {
+  //   console.log(
+  //     `Prey at (${prey.x}, ${prey.y}) can see predator at (${predator.x}, ${predator.y})`
+  //   );
+  // } while (prey.canSee(predator));
 
   const isCaught = grid.isCollision(predator.x, predator.y, prey.x, prey.y);
 
@@ -484,8 +589,6 @@ async function startSimulation(io, socket) {
   });
 
   while (true) {
-    console.log(`Episode: ${episodeCount}`);
-
     predators.forEach((predator) => {
       preys.forEach((prey) => {
         runStep(predator, prey);
@@ -513,85 +616,6 @@ module.exports = { startSimulation };
 
 ---
 
-// grid.js
-class Grid {
-  constructor(size) {
-    this.size = size;
-    this.obstacles = [];
-  }
-
-  setPredatorsAndPreys(predators, preys) {
-    this.predators = predators;
-    this.preys = preys;
-  }
-
-  addObstacle(x, y) {
-    this.obstacles.push({ x, y });
-  }
-
-  isObstacle(x, y) {
-    return this.obstacles.some(
-      (obstacle) => obstacle.x === x && obstacle.y === y
-    );
-  }
-
-  isValidMove(x, y) {
-    return !this.isObstacle(x, y);
-  }
-
-  randomPosition() {
-    let position;
-    let isOccupied;
-
-    while (true) {
-      position = {
-        x: Math.floor(Math.random() * this.size),
-        y: Math.floor(Math.random() * this.size),
-      };
-
-      isOccupied =
-        this.isObstacle(position.x, position.y) ||
-        this.predators.some((p) => p.x === position.x && p.y === position.y) ||
-        this.preys.some((p) => p.x === position.x && p.y === position.y);
-
-      if (!isOccupied) {
-        break;
-      }
-    }
-
-    return position;
-  }
-
-  isCollision(predatorX, predatorY, preyX, preyY) {
-    return predatorX === preyX && predatorY === preyY;
-  }
-
-  placePredators(predators) {
-    predators.forEach((predator) => {
-      const newPos = this.randomPosition();
-      predator.setPosition(newPos.x, newPos.y);
-    });
-  }
-
-  placePreys(preys) {
-    preys.forEach((prey) => {
-      const newPos = this.randomPosition();
-      prey.setPosition(newPos.x, newPos.y);
-    });
-  }
-
-  printGrid() {
-    this.grid.forEach((row) => console.log(row.join(' | ')));
-  }
-}
-
-module.exports = Grid;
-
-
----
-
-
-
 //public/script.js
 
 const socket = io();
@@ -604,99 +628,12 @@ let dataPointsReceived = 0;
 let config;
 
 socket.on('data', (data) => {
-  console.log(data);
   updateDots(data.obstacles, 'obstacle');
-  updateDots(data.predators, 'predator');
-  updateDots(data.preys, 'prey');
-
-  dataPointsReceived++;
-
-  if (dataPointsReceived >= updateInterval) {
-    plotAverageRewards(data.monitoring.episodeResults);
-    plotStepsPerEpisode(data.monitoring.episodeResults);
-    plotMaxQValues(data.monitoring.qValues);
-    dataPointsReceived = 0;
-  }
+  updateDots(data.predators, 'predator', data.visiblePreysForPredators);
+  updateDots(data.preys, 'prey', data.visiblePredatorsForPreys);
 });
 
-function plotAverageRewards(episodeResults) {
-  const predatorAvgRewards = episodeResults.map(
-    (result) => result.predatorTotalReward / result.stepCount
-  );
-  const preyAvgRewards = episodeResults.map(
-    (result) => result.preyTotalReward / result.stepCount
-  );
-
-  const tracePredator = {
-    x: Array.from({ length: episodeResults.length }, (_, i) => i + 1),
-    y: predatorAvgRewards,
-    mode: 'lines',
-    name: 'Predator',
-  };
-
-  const tracePrey = {
-    x: Array.from({ length: episodeResults.length }, (_, i) => i + 1),
-    y: preyAvgRewards,
-    mode: 'lines',
-    name: 'Prey',
-  };
-
-  const layout = {
-    title: 'Average Reward per Episode',
-    xaxis: { title: 'Episode' },
-    yaxis: { title: 'Average Reward' },
-  };
-
-  Plotly.newPlot('rewards-plot', [tracePredator, tracePrey], layout);
-}
-
-function plotStepsPerEpisode(episodeResults) {
-  const stepsPerEpisode = episodeResults.map((result) => result.stepCount);
-
-  const trace = {
-    x: Array.from({ length: episodeResults.length }, (_, i) => i + 1),
-    y: stepsPerEpisode,
-    mode: 'lines',
-    name: 'Steps',
-  };
-
-  const layout = {
-    title: 'Number of Steps per Episode',
-    xaxis: { title: 'Episode' },
-    yaxis: { title: 'Steps' },
-  };
-
-  Plotly.newPlot('steps-plot', [trace], layout);
-}
-
-function plotMaxQValues(qValues) {
-  const maxQValues = qValues.map((qTable) => {
-    let maxQ = -Infinity;
-    for (const state in qTable) {
-      for (const action in qTable[state]) {
-        maxQ = Math.max(maxQ, qTable[state][action]);
-      }
-    }
-    return maxQ;
-  });
-
-  const trace = {
-    x: Array.from({ length: qValues.length }, (_, i) => i + 1),
-    y: maxQValues,
-    mode: 'lines',
-    name: 'Max Q-value',
-  };
-
-  const layout = {
-    title: 'Maximum Q-value over Time',
-    xaxis: { title: 'Time' },
-    yaxis: { title: 'Max Q-value' },
-  };
-
-  Plotly.newPlot('qvalues-plot', [trace], layout);
-}
-
-function updateDots(agentData, type) {
+function updateDots(agentData, type, visibilityData) {
   const existingDots = document.querySelectorAll(`.${type}`);
 
   // Remove extra dots if there are more on the DOM than in the new data
@@ -714,6 +651,12 @@ function updateDots(agentData, type) {
     } else {
       // Create a new dot if there are fewer on the DOM than in the new data
       dotElement = createDot(agent.x, agent.y, type);
+    }
+
+    if (visibilityData) {
+      dotElement.style.opacity = visibilityData[index] ? 1 : 0.3;
+    } else {
+      dotElement.style.opacity = 1;
     }
   });
 }
@@ -822,8 +765,6 @@ fetch('/config')
         top: 0;
         left: 0;
         display: grid;
-        grid-template-columns: repeat(9, 1fr);
-        grid-template-rows: repeat(9, 1fr);
         gap: 1px;
         width: 100vw;
         height: 100vh;
@@ -832,21 +773,6 @@ fetch('/config')
         min-height: calc(
           100% - 320px
         ); /* 320px = plot height + bottom margin */
-      }
-
-      #plots {
-        display: grid;
-        grid-template-rows: repeat(3, 1fr);
-        grid-column-start: 2;
-        gap: 20px;
-        padding: 20px;
-        bottom: 0;
-      }
-
-      #rewards-plot,
-      #steps-plot,
-      #qvalues-plot {
-        max-height: 300px;
       }
 
       .obstacle {
@@ -865,27 +791,11 @@ fetch('/config')
     </style>
   </head>
   <body>
-    <div id="container">
-      <div id="grid">
-        <!-- Empty cells to create grid structure -->
-      </div>
-
-      <!-- Add a div for plots -->
-      <div id="plots">
-        <div id="rewards-plot"></div>
-        <div id="steps-plot"></div>
-        <div id="qvalues-plot"></div>
-      </div>
+    <div id="grid">
+      <!-- Empty cells to create grid structure -->
     </div>
+
     <script src="script.js"></script>
   </body>
 </html>
 
-
-----
-
-As you can see, we've began the implementation of a "FOV" for the agenst (canSee method), we want to bring this simulation as close to reality
-as possible, for this reason we actually need to make the agents "see" each-other and the obstacles, 
-so we can make them avoid the obstacles and chase each-other based on the information which they're obtaining from their "eyes".
-
-How can we finalize the implementation of this functionality?
