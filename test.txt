@@ -1,4 +1,4 @@
-Here's my full code-base, now, thinking in a step-by-step way, I want you to go through all of these files and spot all issues or potential issues ->
+Here's our code.
 
 My folder structure is as follows:
 
@@ -14,8 +14,6 @@ public/script.js
 public/index.html
 
 ----
-
-Here's the bigger part of my code:
 
 //agent.js
 
@@ -60,11 +58,37 @@ class Agent {
       { x: (this.x + 1) % this.grid.size, y: this.y },
       { x: this.x, y: (this.y - 1 + this.grid.size) % this.grid.size },
       { x: this.x, y: (this.y + 1) % this.grid.size },
+      {
+        x: (this.x - 1 + this.grid.size) % this.grid.size,
+        y: (this.y - 1 + this.grid.size) % this.grid.size,
+      },
+      {
+        x: (this.x + 1) % this.grid.size,
+        y: (this.y - 1 + this.grid.size) % this.grid.size,
+      },
+      {
+        x: (this.x - 1 + this.grid.size) % this.grid.size,
+        y: (this.y + 1) % this.grid.size,
+      },
+      { x: (this.x + 1) % this.grid.size, y: (this.y + 1) % this.grid.size },
     ];
 
     return neighbors.filter((neighbor) =>
       this.grid.isValidMove(neighbor.x, neighbor.y)
     );
+  }
+
+  getActions() {
+    return [
+      'up',
+      'down',
+      'left',
+      'right',
+      'up-left',
+      'up-right',
+      'down-left',
+      'down-right',
+    ];
   }
 
   calculateDistance(x1, y1, x2, y2) {
@@ -92,6 +116,22 @@ class Agent {
       case 'right':
         newX = (this.x + 1) % this.grid.size;
         break;
+      case 'up-left':
+        newX = (this.x - 1 + this.grid.size) % this.grid.size;
+        newY = (this.y - 1 + this.grid.size) % this.grid.size;
+        break;
+      case 'up-right':
+        newX = (this.x + 1) % this.grid.size;
+        newY = (this.y - 1 + this.grid.size) % this.grid.size;
+        break;
+      case 'down-left':
+        newX = (this.x - 1 + this.grid.size) % this.grid.size;
+        newY = (this.y + 1) % this.grid.size;
+        break;
+      case 'down-right':
+        newX = (this.x + 1) % this.grid.size;
+        newY = (this.y + 1) % this.grid.size;
+        break;
     }
 
     if (this.grid.isValidMove(newX, newY)) {
@@ -100,12 +140,39 @@ class Agent {
     }
   }
 
-  getState() {
-    return { x: this.x, y: this.y };
+  canSee(otherAgent) {
+    const distance = this.calculateDistance(
+      this.x,
+      this.y,
+      otherAgent.x,
+      otherAgent.y
+    );
+
+    // Calculate the angle between predator and prey
+    const angle =
+      Math.atan2(otherAgent.y - this.y, otherAgent.x - this.x) *
+      (180 / Math.PI);
+
+    // Normalize the angle to be between 0 and 360
+    const normalizedAngle = (angle + 360) % 360;
+
+    // Check if the angle is within the field of view
+    const halfFOV = this.fieldOfView / 2;
+    const lowerBound = (this.direction - halfFOV + 360) % 360;
+    const upperBound = (this.direction + halfFOV) % 360;
+
+    const isWithinFOV =
+      (lowerBound < upperBound &&
+        normalizedAngle >= lowerBound &&
+        normalizedAngle <= upperBound) ||
+      (lowerBound > upperBound &&
+        (normalizedAngle >= lowerBound || normalizedAngle <= upperBound));
+
+    return distance <= this.visionRange && isWithinFOV;
   }
 
-  getActions() {
-    return ['up', 'down', 'left', 'right'];
+  getState() {
+    return { x: this.x, y: this.y };
   }
 
   stateToString(state) {
@@ -133,10 +200,20 @@ class Agent {
   }
 
   calculateActionProbabilities(stateStr, actions, temp) {
-    return actions.map((action) => {
+    const rawProbabilities = actions.map((action) => {
       const qValue = this.qTable[stateStr][action] || 0;
       return Math.exp(qValue / temp);
     });
+
+    // Calculate the sum of raw probabilities
+    const sumProbabilities = rawProbabilities.reduce((a, b) => a + b, 0);
+
+    // Normalize the probabilities by dividing each probability by the sum of all probabilities
+    const normalizedProbabilities = rawProbabilities.map((probability) => {
+      return probability / sumProbabilities;
+    });
+
+    return normalizedProbabilities;
   }
 
   selectActionBasedOnProbabilities(actions, probabilities) {
@@ -172,54 +249,114 @@ class Agent {
 
 module.exports = Agent;
 
----
+----
+
+//predator.js
 
 const Agent = require('./agent');
-
-// prey.js
-class Prey extends Agent {
+class Predator extends Agent {
   constructor(x, y, grid) {
     super(x, y, grid);
-    this.fieldOfView = 270;
+    this.fieldOfView = 90;
     this.qTable = {};
+    this.history = [];
   }
 
   chooseAction(state) {
-    const temp = Math.max(1.4 - this.stepCount / 10000, 0.1);
-    return super.chooseAction(state, temp);
+    const visiblePreys = this.preys.filter((prey) => this.canSee(prey));
+
+    // If no visible preys, choose a random action
+    if (visiblePreys.length === 0) {
+      const temp = Math.max(1.4 - this.stepCount / 10000, 0.1);
+      return super.chooseAction(state, temp);
+    }
+
+    const closestPrey = visiblePreys.reduce((closest, current) => {
+      const closestDistance = this.calculateDistance(
+        this.x,
+        this.y,
+        closest.x,
+        closest.y
+      );
+      const currentDistance = this.calculateDistance(
+        this.x,
+        this.y,
+        current.x,
+        current.y
+      );
+      return currentDistance < closestDistance ? current : closest;
+    });
+
+    // Choose an action based on the closest visible prey
+    const deltaX = closestPrey.x - this.x;
+    const deltaY = closestPrey.y - this.y;
+
+    // Determine the best action for the predator to move closer to the prey
+    const actions = this.getActions();
+    const distancesAfterActions = actions.map((action) => {
+      const { x: newX, y: newY } = this.getNewPositionAfterAction(action);
+      return this.calculateDistance(newX, newY, closestPrey.x, closestPrey.y);
+    });
+
+    const minDistanceIndex = distancesAfterActions.indexOf(
+      Math.min(...distancesAfterActions)
+    );
+
+    return actions[minDistanceIndex];
   }
 
-  getReward(predatorState) {
-    const dx = Math.abs(this.x - predatorState.x);
-    const dy = Math.abs(this.y - predatorState.y);
+  getNewPositionAfterAction(action) {
+    let newX = this.x;
+    let newY = this.y;
+
+    switch (action) {
+      case 'up':
+        newY = (this.y - 1 + this.grid.size) % this.grid.size;
+        break;
+      case 'down':
+        newY = (this.y + 1) % this.grid.size;
+        break;
+      case 'left':
+        newX = (this.x - 1 + this.grid.size) % this.grid.size;
+        break;
+      case 'right':
+        newX = (this.x + 1) % this.grid.size;
+        break;
+      case 'up-left':
+        newX = (this.x - 1 + this.grid.size) % this.grid.size;
+        newY = (this.y - 1 + this.grid.size) % this.grid.size;
+        break;
+      case 'up-right':
+        newX = (this.x + 1) % this.grid.size;
+        newY = (this.y - 1 + this.grid.size) % this.grid.size;
+        break;
+      case 'down-left':
+        newX = (this.x - 1 + this.grid.size) % this.grid.size;
+        newY = (this.y + 1) % this.grid.size;
+        break;
+      case 'down-right':
+        newX = (this.x + 1) % this.grid.size;
+        newY = (this.y + 1) % this.grid.size;
+        break;
+    }
+
+    return { x: newX, y: newY };
+  }
+
+  // ...
+
+  getReward(preyState) {
+    const dx = Math.abs(this.x - preyState.x);
+    const dy = Math.abs(this.y - preyState.y);
     const wrappedDx = Math.min(dx, this.grid.size - dx);
     const wrappedDy = Math.min(dy, this.grid.size - dy);
     const distance = Math.sqrt(Math.pow(wrappedDx, 2) + Math.pow(wrappedDy, 2));
-    return distance;
+    const rewardFactor = 1.5; // Adjust this value to change the reward scaling
+    return -Math.pow(distance, rewardFactor);
   }
 }
 
-module.exports = Prey;
-
----
-
-predator.js is kind of the same...
-
----
-
-//config.js
-
-const config = {
-  MAX_STEPS_PER_EPISODE: 1000,
-  collisionRewardPredator: 100,
-  collisionRewardPrey: -100,
-  nrOfObstacles: 25,
-  nrOfPredators: 50,
-  nrOfPreys: 50,
-  gridSize: 50,
-};
-
-module.exports = config;
+module.exports = Predator;
 
 ---
 
@@ -229,7 +366,7 @@ const Predator = require('../agents/predator');
 const Prey = require('../agents/prey');
 const Grid = require('../environment/grid');
 const Monitoring = require('../monitoring/monitoring');
-const config = require('../config');
+const config = require('./config');
 
 const MAX_STEPS_PER_EPISODE = config.MAX_STEPS_PER_EPISODE;
 
@@ -263,21 +400,23 @@ grid.setPredatorsAndPreys(predators, preys);
 grid.placePredators(predators);
 grid.placePreys(preys);
 
-function shuffleArray(array) {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-}
+//Knuth algortihm, ensuring that each permutation of the array elements has an equal probability of appearance.
+//Not needed currently, but might be useful in the future
+
+// function shuffleArray(array) {
+//   for (let i = array.length - 1; i > 0; i--) {
+//     const j = Math.floor(Math.random() * (i + 1));
+//     [array[i], array[j]] = [array[j], array[i]];
+//   }
+// }
 
 function resetPositions() {
+  console.log('resetting positions (episode count): ' + episodeCount);
   monitoring.logEpisodeResults(predatorTotalReward, preyTotalReward, stepCount);
   monitoring.logQValues(testingPredator.qTable);
   predatorTotalReward = 0;
   preyTotalReward = 0;
   stepCount = 0;
-  shuffleArray(predators);
-  shuffleArray(preys);
 
   grid.placePredators(predators);
   grid.placePreys(preys);
@@ -295,6 +434,7 @@ for (let i = 0; i < nrOfObstacles; i++) {
 }
 
 function runStep(predator, prey) {
+  console.log('Running step: ' + stepCount);
   const predatorAction = predator.chooseAction(predator.getState());
   predator.move(predatorAction);
 
@@ -330,11 +470,9 @@ function runStep(predator, prey) {
     predator.getState()
   );
   prey.updateQTable(prey.getState(), preyAction, preyReward, prey.getState());
-
-  return { predatorReward, preyReward };
 }
 
-function startSimulation(io, socket) {
+async function startSimulation(io, socket) {
   socket.emit('data', {
     predators: predators.map(({ x, y }) => ({ x, y })),
     preys: preys.map(({ x, y }) => ({ x, y })),
@@ -345,12 +483,12 @@ function startSimulation(io, socket) {
     },
   });
 
-  setInterval(() => {
+  while (true) {
     console.log(`Episode: ${episodeCount}`);
 
     predators.forEach((predator) => {
       preys.forEach((prey) => {
-        const { predatorReward, preyReward } = runStep(predator, prey);
+        runStep(predator, prey);
       });
     });
 
@@ -365,21 +503,105 @@ function startSimulation(io, socket) {
         qValues: monitoring.qValues,
       },
     });
-  }, 2000);
+
+    // Wait for 2000 milliseconds before running the next iteration
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
 }
 
 module.exports = { startSimulation };
 
 ---
 
+// grid.js
+class Grid {
+  constructor(size) {
+    this.size = size;
+    this.obstacles = [];
+  }
+
+  setPredatorsAndPreys(predators, preys) {
+    this.predators = predators;
+    this.preys = preys;
+  }
+
+  addObstacle(x, y) {
+    this.obstacles.push({ x, y });
+  }
+
+  isObstacle(x, y) {
+    return this.obstacles.some(
+      (obstacle) => obstacle.x === x && obstacle.y === y
+    );
+  }
+
+  isValidMove(x, y) {
+    return !this.isObstacle(x, y);
+  }
+
+  randomPosition() {
+    let position;
+    let isOccupied;
+
+    while (true) {
+      position = {
+        x: Math.floor(Math.random() * this.size),
+        y: Math.floor(Math.random() * this.size),
+      };
+
+      isOccupied =
+        this.isObstacle(position.x, position.y) ||
+        this.predators.some((p) => p.x === position.x && p.y === position.y) ||
+        this.preys.some((p) => p.x === position.x && p.y === position.y);
+
+      if (!isOccupied) {
+        break;
+      }
+    }
+
+    return position;
+  }
+
+  isCollision(predatorX, predatorY, preyX, preyY) {
+    return predatorX === preyX && predatorY === preyY;
+  }
+
+  placePredators(predators) {
+    predators.forEach((predator) => {
+      const newPos = this.randomPosition();
+      predator.setPosition(newPos.x, newPos.y);
+    });
+  }
+
+  placePreys(preys) {
+    preys.forEach((prey) => {
+      const newPos = this.randomPosition();
+      prey.setPosition(newPos.x, newPos.y);
+    });
+  }
+
+  printGrid() {
+    this.grid.forEach((row) => console.log(row.join(' | ')));
+  }
+}
+
+module.exports = Grid;
+
+
+---
+
+
+
 //public/script.js
 
 const socket = io();
 const gridEl = document.getElementById('grid');
 
-const gridSize = 50;
-
 const agentSize = 10;
+
+const updateInterval = 10; // Update the plots every 10 data points
+let dataPointsReceived = 0;
+let config;
 
 socket.on('data', (data) => {
   console.log(data);
@@ -387,9 +609,14 @@ socket.on('data', (data) => {
   updateDots(data.predators, 'predator');
   updateDots(data.preys, 'prey');
 
-  plotAverageRewards(data.monitoring.episodeResults);
-  plotStepsPerEpisode(data.monitoring.episodeResults);
-  plotMaxQValues(data.monitoring.qValues);
+  dataPointsReceived++;
+
+  if (dataPointsReceived >= updateInterval) {
+    plotAverageRewards(data.monitoring.episodeResults);
+    plotStepsPerEpisode(data.monitoring.episodeResults);
+    plotMaxQValues(data.monitoring.qValues);
+    dataPointsReceived = 0;
+  }
 });
 
 function plotAverageRewards(episodeResults) {
@@ -511,7 +738,8 @@ function createDot(x, y, type) {
     moveDot(dotElement, x, y, false);
   }
 
-  const cellSize = Math.min(window.innerWidth, window.innerHeight) / gridSize;
+  const cellSize =
+    Math.min(window.innerWidth, window.innerHeight) / config.gridSize;
   dotElement.style.transform = `translate(${x * cellSize}px, ${
     y * cellSize
   }px)`;
@@ -520,7 +748,8 @@ function createDot(x, y, type) {
 }
 
 function moveDot(dot, x, y, animate = true) {
-  const cellSize = Math.min(window.innerWidth, window.innerHeight) / gridSize;
+  const cellSize =
+    Math.min(window.innerWidth, window.innerHeight) / config.gridSize;
 
   if (animate) {
     gsap.to(dot, {
@@ -535,16 +764,27 @@ function moveDot(dot, x, y, animate = true) {
 }
 
 function generateEmptyCells() {
-  for (let i = 0; i < gridSize * gridSize; i++) {
+  // Clear the grid
+  gridEl.innerHTML = '';
+
+  // Generate new cells based on the gridSize from the config
+  for (let i = 0; i < config.gridSize * config.gridSize; i++) {
     const gridCell = document.createElement('div');
     gridCell.className = 'grid-cell';
     gridEl.appendChild(gridCell);
   }
+
+  // Update the grid template columns and rows
+  gridEl.style.gridTemplateColumns = `repeat(${config.gridSize}, 1fr)`;
+  gridEl.style.gridTemplateRows = `repeat(${config.gridSize}, 1fr)`;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  generateEmptyCells();
-});
+fetch('/config')
+  .then((response) => response.json())
+  .then((data) => {
+    config = data;
+    generateEmptyCells();
+  });
 
 ---
 
@@ -582,8 +822,8 @@ document.addEventListener('DOMContentLoaded', () => {
         top: 0;
         left: 0;
         display: grid;
-        grid-template-columns: repeat(50, 1fr);
-        grid-template-rows: repeat(50, 1fr);
+        grid-template-columns: repeat(9, 1fr);
+        grid-template-rows: repeat(9, 1fr);
         gap: 1px;
         width: 100vw;
         height: 100vh;
@@ -628,7 +868,6 @@ document.addEventListener('DOMContentLoaded', () => {
     <div id="container">
       <div id="grid">
         <!-- Empty cells to create grid structure -->
-        <div class="grid-cell"></div>
       </div>
 
       <!-- Add a div for plots -->
@@ -641,3 +880,12 @@ document.addEventListener('DOMContentLoaded', () => {
     <script src="script.js"></script>
   </body>
 </html>
+
+
+----
+
+As you can see, we've began the implementation of a "FOV" for the agenst (canSee method), we want to bring this simulation as close to reality
+as possible, for this reason we actually need to make the agents "see" each-other and the obstacles, 
+so we can make them avoid the obstacles and chase each-other based on the information which they're obtaining from their "eyes".
+
+How can we finalize the implementation of this functionality?

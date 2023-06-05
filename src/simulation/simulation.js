@@ -26,12 +26,9 @@ const predators = [];
 const preys = [];
 
 for (let i = 0; i < config.nrOfPredators; i++) {
-  predators.push(new Predator(null, null, grid));
+  predators.push(new Predator(null, null, grid, preys));
   preys.push(new Prey(null, null, grid));
 }
-
-const testingPredator = new Predator(null, null, grid);
-predators.push(testingPredator);
 
 // Rely on placePredators and placePreys methods to set positions
 grid.setPredatorsAndPreys(predators, preys);
@@ -50,7 +47,7 @@ grid.placePreys(preys);
 
 function resetPositions() {
   monitoring.logEpisodeResults(predatorTotalReward, preyTotalReward, stepCount);
-  monitoring.logQValues(testingPredator.qTable);
+  // monitoring.logQValues(testingPredator.qTable);
   predatorTotalReward = 0;
   preyTotalReward = 0;
   stepCount = 0;
@@ -120,8 +117,6 @@ async function startSimulation(io, socket) {
   });
 
   while (true) {
-    console.log(`Episode: ${episodeCount}`);
-
     predators.forEach((predator) => {
       preys.forEach((prey) => {
         runStep(predator, prey);

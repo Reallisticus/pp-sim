@@ -1,5 +1,7 @@
 //agent.js
 
+const bresenhamLine = require('../helpers/bresenhamLine');
+
 class Agent {
   constructor(x, y, grid) {
     this.grid = grid;
@@ -41,6 +43,19 @@ class Agent {
       { x: (this.x + 1) % this.grid.size, y: this.y },
       { x: this.x, y: (this.y - 1 + this.grid.size) % this.grid.size },
       { x: this.x, y: (this.y + 1) % this.grid.size },
+      {
+        x: (this.x - 1 + this.grid.size) % this.grid.size,
+        y: (this.y - 1 + this.grid.size) % this.grid.size,
+      },
+      {
+        x: (this.x + 1) % this.grid.size,
+        y: (this.y - 1 + this.grid.size) % this.grid.size,
+      },
+      {
+        x: (this.x - 1 + this.grid.size) % this.grid.size,
+        y: (this.y + 1) % this.grid.size,
+      },
+      { x: (this.x + 1) % this.grid.size, y: (this.y + 1) % this.grid.size },
     ];
 
     return neighbors.filter((neighbor) =>
@@ -108,6 +123,51 @@ class Agent {
       this.x = newX;
       this.y = newY;
     }
+  }
+
+  canSee(otherAgent) {
+    const distance = this.calculateDistance(
+      this.x,
+      this.y,
+      otherAgent.x,
+      otherAgent.y
+    );
+
+    // Calculate the angle between predator and prey
+    const angle =
+      Math.atan2(otherAgent.y - this.y, otherAgent.x - this.x) *
+      (180 / Math.PI);
+
+    // Normalize the angle to be between 0 and 360
+    const normalizedAngle = (angle + 360) % 360;
+
+    // Check if the angle is within the field of view
+    const halfFOV = this.fieldOfView / 2;
+    const lowerBound = (this.direction - halfFOV + 360) % 360;
+    const upperBound = (this.direction + halfFOV) % 360;
+
+    const isWithinFOV =
+      (lowerBound < upperBound &&
+        normalizedAngle >= lowerBound &&
+        normalizedAngle <= upperBound) ||
+      (lowerBound > upperBound &&
+        (normalizedAngle >= lowerBound || normalizedAngle <= upperBound));
+
+    if (distance <= this.visionRange && isWithinFOV) {
+      const linePoints = bresenhamLine(
+        this.x,
+        this.y,
+        otherAgent.x,
+        otherAgent.y
+      );
+
+      // Check if there's a direct line of sight without any obstacles
+      return !linePoints.some((point) =>
+        this.grid.isObstacle(point.x, point.y)
+      );
+    }
+
+    return false;
   }
 
   getState() {
