@@ -1,5 +1,4 @@
 //agent.js
-
 const bresenhamLine = require('../helpers/bresenhamLine');
 
 class Agent {
@@ -11,6 +10,9 @@ class Agent {
     this.qTable = {};
     this.stepCount = 0;
     this.fieldOfView = this.fieldOfView || 360;
+
+    this.previousX = null;
+    this.previousY = null;
   }
 
   setPosition(x, y) {
@@ -88,6 +90,9 @@ class Agent {
   move(action) {
     let newX = this.x;
     let newY = this.y;
+
+    this.previousX = this.x;
+    this.previousY = this.y;
 
     switch (action) {
       case 'up':
@@ -177,42 +182,63 @@ class Agent {
     return `${state.x},${state.y}`;
   }
 
+  stateToObject(state) {
+    return { x: state.x, y: state.y };
+  }
+
   chooseAction(state, temp) {
-    const stateStr = this.stateToString(state);
+    const stateObj = this.stateToObject(state);
     const actions = this.getActions();
-    if (!this.qTable[stateStr]) {
-      // Initialize the qTable for all possible actions with 0 values
-      this.qTable[stateStr] = {};
+
+    if (!this.qTable[stateObj.x]) {
+      this.qTable[stateObj.x] = {};
+    }
+
+    if (!this.qTable[stateObj.x][stateObj.y]) {
+      this.qTable[stateObj.x][stateObj.y] = {};
       actions.forEach((action) => {
-        this.qTable[stateStr][action] = 0;
+        this.qTable[stateObj.x][stateObj.y][action] = 0;
       });
     }
 
     const actionProbabilities = this.calculateActionProbabilities(
-      stateStr,
+      stateObj,
       actions,
       temp
     );
-    return this.selectActionBasedOnProbabilities(actions, actionProbabilities);
+    const selectedAction = this.selectActionBasedOnProbabilities(
+      actions,
+      actionProbabilities
+    );
+
+    return selectedAction;
   }
 
-  calculateActionProbabilities(stateStr, actions, temp, heuristics = []) {
-    // Initialize the qTable for the state if not already initialized
-    if (!this.qTable[stateStr]) {
-      this.qTable[stateStr] = {};
+  calculateActionProbabilities(stateObj, actions, temp, heuristics = []) {
+    if (!this.qTable[stateObj.x]) {
+      this.qTable[stateObj.x] = {};
+    }
+    if (!this.qTable[stateObj.x][stateObj.y]) {
+      this.qTable[stateObj.x][stateObj.y] = {};
       actions.forEach((action) => {
-        this.qTable[stateStr][action] = 0;
+        this.qTable[stateObj.x][stateObj.y][action] = 0;
       });
     }
 
     const maxQValue = Math.max(
-      ...actions.map((action) => this.qTable[stateStr][action])
+      ...actions.map((action) => this.qTable[stateObj.x][stateObj.y][action])
     );
 
     const rawProbabilities = actions.map((action, index) => {
-      const qValue = this.qTable[stateStr][action] || 0;
+      const qValue = this.qTable[stateObj.x][stateObj.y][action] || 0;
       const heuristicValue = heuristics[index] || 0;
-      return Math.exp((qValue + heuristicValue - maxQValue) / temp);
+
+      const expValue = Math.min(
+        (qValue + heuristicValue - maxQValue) / temp,
+        700
+      );
+
+      return isNaN(expValue) ? 0.01 : Math.exp(expValue);
     });
 
     // Calculate the sum of raw probabilities
@@ -222,6 +248,11 @@ class Agent {
     const normalizedProbabilities = rawProbabilities.map((probability) => {
       return probability / sumProbabilities;
     });
+
+    if (normalizedProbabilities.every((p) => isNaN(p) || p === 0)) {
+      // If all probabilities are NaN or 0, force the first probability to a small value (like 0.01)
+      normalizedProbabilities[0] = 0.01;
+    }
 
     return normalizedProbabilities;
   }
@@ -240,21 +271,59 @@ class Agent {
   }
 
   updateQTable(state, action, reward, nextState) {
-    const stateStr = this.stateToString(state);
-    const nextStateStr = this.stateToString(nextState);
-    if (!this.qTable[stateStr]) {
-      this.qTable[stateStr] = {};
+    const stateObj = this.stateToObject(state);
+    const nextStateObj = this.stateToObject(nextState);
+    if (!this.qTable[stateObj.x]) {
+      this.qTable[stateObj.x] = {};
     }
-    const oldQ = this.qTable[stateStr][action] || 0;
+    if (!this.qTable[stateObj.x][stateObj.y]) {
+      this.qTable[stateObj.x][stateObj.y] = {};
+    }
+    const oldQ = this.qTable[stateObj.x][stateObj.y][action] || 0;
     const nextMaxQ = Math.max(
-      ...Object.values(this.qTable[nextStateStr] || {})
+      ...Object.values(this.qTable[nextStateObj.x][nextStateObj.y] || {})
     );
     const learningRate = 1 / (1 + this.stepCount / 1000);
 
-    this.qTable[stateStr][action] =
+    this.qTable[stateObj.x][stateObj.y][action] =
       oldQ + learningRate * (reward + 0.9 * nextMaxQ - oldQ);
     this.stepCount++;
+
+    if (this.qTable[stateObj.x][stateObj.y][action] > 0) {
+      console.log(
+        `Agent [${
+          this.constructor.name
+        }] updated qTable for state [${JSON.stringify(stateObj)}] ` +
+          ` and action [${action}] to ${
+            this.qTable[stateObj.x][stateObj.y][action]
+          }`
+      );
+    }
   }
+
+  // updateQTable(state, action, reward, nextState) {
+  //   const stateStr = this.stateToString(state);
+  //   const nextStateStr = this.stateToString(nextState);
+  //   if (!this.qTable[stateStr]) {
+  //     this.qTable[stateStr] = {};
+  //   }
+  //   const oldQ = this.qTable[stateStr][action] || 0;
+  //   const nextMaxQ = Math.max(
+  //     ...Object.values(this.qTable[nextStateStr] || {})
+  //   );
+  //   const learningRate = 1 / (1 + this.stepCount / 1000);
+
+  //   this.qTable[stateStr][action] =
+  //     oldQ + learningRate * (reward + 0.9 * nextMaxQ - oldQ);
+  //   this.stepCount++;
+
+  //   if (this.qTable[stateStr][action] > 0) {
+  //     console.log(
+  //       `Agent [${this.constructor.name}] updated qTable for state [${stateStr}] ` +
+  //         ` and action [${action}] to ${this.qTable[stateStr][action]}`
+  //     );
+  //   }
+  // }
 }
 
 module.exports = Agent;

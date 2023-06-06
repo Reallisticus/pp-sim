@@ -23,7 +23,9 @@ app.get('/config', (req, res) => {
 
 io.on('connection', (socket) => {
   console.log('a user connected');
-  simulation.startSimulation(io, socket);
+  socket.on('simulationStart', () => {
+    simulation.startSimulation(io, socket);
+  });
 });
 
 server.listen(port, () => {

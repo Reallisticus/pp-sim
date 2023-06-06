@@ -3,14 +3,12 @@
 const Predator = require('../agents/predator');
 const Prey = require('../agents/prey');
 const Grid = require('../environment/grid');
-const Monitoring = require('../monitoring/monitoring');
 const config = require('./config');
 
 const MAX_STEPS_PER_EPISODE = config.MAX_STEPS_PER_EPISODE;
 
 // Create a new grid
 const grid = new Grid(config.gridSize);
-const monitoring = new Monitoring();
 
 let predatorTotalReward = 0;
 let preyTotalReward = 0;
@@ -35,25 +33,20 @@ grid.setPredatorsAndPreys(predators, preys);
 grid.placePredators(predators);
 grid.placePreys(preys);
 
-//Knuth algortihm, ensuring that each permutation of the array elements has an equal probability of appearance.
-//Not needed currently, but might be useful in the future
-
-// function shuffleArray(array) {
-//   for (let i = array.length - 1; i > 0; i--) {
-//     const j = Math.floor(Math.random() * (i + 1));
-//     [array[i], array[j]] = [array[j], array[i]];
-//   }
-// }
-
 function resetPositions() {
-  monitoring.logEpisodeResults(predatorTotalReward, preyTotalReward, stepCount);
-  // monitoring.logQValues(testingPredator.qTable);
   predatorTotalReward = 0;
   preyTotalReward = 0;
   stepCount = 0;
 
   grid.placePredators(predators);
   grid.placePreys(preys);
+
+  preys.forEach((prey) => {
+    if (prey.stepCount >= config.preySurvivalThreshold) {
+      const newPrey = prey.spawn();
+      preys.push(newPrey);
+    }
+  });
 }
 
 for (let i = 0; i < nrOfObstacles; i++) {
@@ -67,7 +60,7 @@ for (let i = 0; i < nrOfObstacles; i++) {
   grid.addObstacle(obstaclePos.x, obstaclePos.y);
 }
 
-function runStep(predator, prey) {
+async function runStep(predator, prey) {
   const predatorAction = predator.chooseAction(predator.getState());
   predator.move(predatorAction);
 
@@ -89,20 +82,6 @@ function runStep(predator, prey) {
 
   const preyReward = prey.getReward(predator.getState(), preyVisibleObstacles);
 
-  // if (prey.canSee(predator)) {
-  //   console.log(
-  //     `Prey at (${prey.x}, ${prey.y}) can see prey at (${predator.x}, ${predator.y})`
-  //   );
-  // }
-
-  console.log(episodeCount);
-
-  // if (predator.canSee(prey)) {
-  //   console.log(
-  //     `Predator at (${predator.x}, ${predator.y}) can see prey at (${prey.x}, ${prey.y})`
-  //   );
-  // }
-
   const isCaught = grid.isCollision(predator.x, predator.y, prey.x, prey.y);
 
   if (isCaught || stepCount >= MAX_STEPS_PER_EPISODE) {
@@ -114,6 +93,16 @@ function runStep(predator, prey) {
     if (isCaught) {
       predatorTotalReward += collisionRewardPredator;
       preyTotalReward += collisionRewardPrey;
+
+      const newPredator = predator.spawn();
+      predators.push(newPredator);
+
+      const preyIndex = preys.indexOf(prey);
+      if (preyIndex !== -1) {
+        preys.splice(preyIndex, 1);
+      }
+      stepCount++;
+      predator.lastCatchStep = stepCount;
     }
 
     resetPositions();
@@ -122,12 +111,24 @@ function runStep(predator, prey) {
     preyTotalReward += preyReward;
   }
 
+  if (
+    stepCount - predator.lastCatchStep >=
+    config.predatorStarvationThreshold
+  ) {
+    // Remove the starving predator from the predators array
+    const predatorIndex = predators.indexOf(predator);
+    if (predatorIndex !== -1) {
+      predators.splice(predatorIndex, 1);
+    }
+  }
+
   predator.updateQTable(
     predator.getState(),
     predatorAction,
     predatorReward,
     predator.getState()
   );
+
   prey.updateQTable(prey.getState(), preyAction, preyReward, prey.getState());
 }
 
@@ -136,10 +137,12 @@ async function startSimulation(io, socket) {
     predators: predators.map(({ x, y }) => ({ x, y })),
     preys: preys.map(({ x, y }) => ({ x, y })),
     obstacles: grid.obstacles,
-    monitoring: {
-      episodeResults: monitoring.episodeResults,
-      qValues: monitoring.qValues,
-    },
+    visiblePreysForPredators: predators.map((predator) =>
+      preys.map((prey) => predator.canSee(prey))
+    ),
+    visiblePredatorsForPreys: preys.map((prey) =>
+      predators.map((predator) => prey.canSee(predator))
+    ),
   });
 
   while (true) {
@@ -149,20 +152,21 @@ async function startSimulation(io, socket) {
       });
     });
 
-    stepCount++;
-
     socket.emit('data', {
       predators: predators.map(({ x, y }) => ({ x, y })),
       preys: preys.map(({ x, y }) => ({ x, y })),
       obstacles: grid.obstacles,
-      monitoring: {
-        episodeResults: monitoring.episodeResults,
-        qValues: monitoring.qValues,
-      },
+      visiblePreysForPredators: predators.map((predator) =>
+        preys.map((prey) => predator.canSee(prey))
+      ),
+      visiblePredatorsForPreys: preys.map((prey) =>
+        predators.map((predator) => prey.canSee(predator))
+      ),
     });
 
     // Wait for 2000 milliseconds before running the next iteration
     await new Promise((resolve) => setTimeout(resolve, 2000));
+    stepCount++;
   }
 }
 

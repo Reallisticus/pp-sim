@@ -3,7 +3,7 @@
 const socket = io();
 const gridEl = document.getElementById('grid');
 
-const agentSize = 10;
+const agentSize = 15;
 
 const updateInterval = 10; // Update the plots every 10 data points
 let dataPointsReceived = 0;
@@ -15,7 +15,7 @@ socket.on('data', (data) => {
   updateDots(data.preys, 'prey', data.visiblePredatorsForPreys);
 });
 
-function updateDots(agentData, type, visibilityData) {
+function updateDots(agentData, type, visibilityData = false) {
   const existingDots = document.querySelectorAll(`.${type}`);
 
   // Remove extra dots if there are more on the DOM than in the new data
@@ -65,6 +65,7 @@ function createDot(x, y, type) {
 
   const cellSize =
     Math.min(window.innerWidth, window.innerHeight) / config.gridSize;
+
   dotElement.style.transform = `translate(${x * cellSize}px, ${
     y * cellSize
   }px)`;
@@ -77,12 +78,56 @@ function moveDot(dot, x, y, animate = true) {
     Math.min(window.innerWidth, window.innerHeight) / config.gridSize;
 
   if (animate) {
-    gsap.to(dot, {
-      duration: 2, // Animation duration
-      x: x * cellSize, // Compute X position
-      y: y * cellSize, // Compute Y position
-      ease: 'sine.inOut', // Animation easing function
-    });
+    const rect = dot.getBoundingClientRect();
+    const gridRect = gridEl.getBoundingClientRect();
+    const currentX = rect.left - gridRect.left;
+    const currentY = rect.top - gridRect.top;
+    const newXPos = x * cellSize;
+    const newYPos = y * cellSize;
+
+    // Check if the dot is wrapping around the grid
+    const isWrappingX =
+      Math.abs(newXPos - currentX) > cellSize * (config.gridSize - 1);
+    const isWrappingY =
+      Math.abs(newYPos - currentY) > cellSize * (config.gridSize - 1);
+
+    if (isWrappingX || isWrappingY) {
+      // Calculate the intermediate position outside the grid
+      const intermediateXPos = isWrappingX
+        ? newXPos > currentX
+          ? currentX - cellSize
+          : currentX + cellSize
+        : currentX;
+      const intermediateYPos = isWrappingY
+        ? newYPos > currentY
+          ? currentY - cellSize
+          : currentY + cellSize
+        : currentY;
+
+      // Animate the dot to move off the grid
+      gsap.to(dot, {
+        duration: 1, // Animation duration
+        x: intermediateXPos,
+        y: intermediateYPos,
+        ease: 'sine.inOut', // Animation easing function
+        onComplete: () => {
+          // Animate the dot to move back onto the grid from the opposite side
+          gsap.to(dot, {
+            duration: 1, // Animation duration
+            x: newXPos,
+            y: newYPos,
+            ease: 'sine.easeIn', // Animation easing function
+          });
+        },
+      });
+    } else {
+      gsap.to(dot, {
+        duration: 2, // Animation duration
+        x: newXPos, // Compute X position
+        y: newYPos, // Compute Y position
+        ease: 'sine.inOut', // Animation easing function
+      });
+    }
   } else {
     dot.style.transform = `translate(${x * cellSize}px, ${y * cellSize}px)`;
   }
@@ -109,4 +154,5 @@ fetch('/config')
   .then((data) => {
     config = data;
     generateEmptyCells();
+    socket.emit('simulationStart');
   });

@@ -1,5 +1,5 @@
 const Agent = require('./agent');
-
+const config = require('../simulation/config');
 // prey.js
 class Prey extends Agent {
   constructor(x, y, grid, predators) {
@@ -8,6 +8,13 @@ class Prey extends Agent {
     this.qTable = {};
     this.predators = predators;
     this.visionRange = 3;
+  }
+
+  spawn() {
+    console.log(`Prey was spawned!`);
+    const newPrey = new Prey(null, null, this.grid, this.predators);
+    this.grid.placePreys([newPrey]);
+    return newPrey;
   }
 
   chooseAction(state) {
@@ -24,16 +31,18 @@ class Prey extends Agent {
     const heuristicValues = actions.map((action) => {
       const { x: newX, y: newY } = this.getNewPositionAfterAction(action);
 
-      const distanceToClosestPredator = Math.min(
-        ...visiblePredators.map((predator) =>
-          this.calculateDistance(newX, newY, predator.x, predator.y)
-        )
-      );
-      const distanceToClosestObstacle = Math.min(
-        ...visibleObstacles.map((obstacle) =>
-          this.calculateDistance(newX, newY, obstacle.x, obstacle.y)
-        )
-      );
+      const distanceToClosestPredator =
+        Math.min(
+          ...visiblePredators.map((predator) =>
+            this.calculateDistance(newX, newY, predator.x, predator.y)
+          )
+        ) + 0.001;
+      const distanceToClosestObstacle =
+        Math.min(
+          ...visibleObstacles.map((obstacle) =>
+            this.calculateDistance(newX, newY, obstacle.x, obstacle.y)
+          )
+        ) + 0.001;
 
       const predatorHeuristicFactor = 1.5; // Adjust this value to change the predator heuristic scaling
       const obstacleHeuristicFactor = -0.5; // Adjust this value to change the obstacle heuristic scaling
@@ -58,7 +67,12 @@ class Prey extends Agent {
       heuristicValues
     );
 
-    return this.selectActionBasedOnProbabilities(actions, actionProbabilities);
+    const selectedAction = this.selectActionBasedOnProbabilities(
+      actions,
+      actionProbabilities
+    );
+
+    return selectedAction;
   }
 
   getNewPositionAfterAction(action) {
@@ -104,16 +118,20 @@ class Prey extends Agent {
     const dy = Math.abs(this.y - predatorState.y);
     const wrappedDx = Math.min(dx, this.grid.size - dx);
     const wrappedDy = Math.min(dy, this.grid.size - dy);
-    const distanceToPredator = Math.sqrt(
-      Math.pow(wrappedDx, 2) + Math.pow(wrappedDy, 2)
-    );
+    const distanceToPredator =
+      Math.sqrt(Math.pow(wrappedDx, 2) + Math.pow(wrappedDy, 2)) + 0.001;
 
     // Calculate the distance to the closest obstacle
-    const distanceToClosestObstacle = Math.min(
-      ...obstacleStates.map((obstacle) =>
-        this.calculateDistance(this.x, this.y, obstacle.x, obstacle.y)
-      )
-    );
+    const distanceToClosestObstacle = obstacleStates.length
+      ? Math.min(
+          ...obstacleStates.map((obstacle) =>
+            this.calculateDistance(this.x, this.y, obstacle.x, obstacle.y)
+          )
+        ) + 0.001
+      : Infinity;
+
+    const directionFactor = this.getDirectionFactor(predatorState);
+    const reproductionReward = this.getReproductionReward();
 
     const rewardFactor = 1.5; // Adjust this value to change the reward scaling
     const obstaclePenaltyFactor = 0.5; // Adjust this value to change the obstacle penalty scaling
@@ -125,7 +143,52 @@ class Prey extends Agent {
         ? -Math.pow(distanceToClosestObstacle, obstaclePenaltyFactor)
         : 0;
 
-    return predatorReward + obstaclePenalty;
+    return (
+      predatorReward + obstaclePenalty + directionFactor + reproductionReward
+    );
+  }
+
+  getDirectionFactor(predatorState) {
+    // Calculate the direction factor based on the angle between the prey's movement and the line connecting the prey and predator
+    const angleBetweenMovementAndPredator =
+      this.calculateAngleBetweenMovementAndPredator(predatorState);
+    const directionFactor = Math.cos(angleBetweenMovementAndPredator);
+    return directionFactor;
+  }
+
+  getReproductionReward() {
+    // Add a reward for successful reproduction
+    if (this.stepCount >= config.preyReproductionThreshold) {
+      return config.preyReproductionReward;
+    }
+    return 0;
+  }
+
+  calculateAngleBetweenMovementAndPredator(predatorState) {
+    const dx = this.x - predatorState.x;
+    const dy = this.y - predatorState.y;
+    const distanceToPredator = Math.sqrt(dx * dx + dy * dy);
+
+    const movementVector = {
+      x: this.x - this.previousX,
+      y: this.y - this.previousY,
+    };
+    const predatorVector = {
+      x: dx / distanceToPredator,
+      y: dy / distanceToPredator,
+    };
+
+    const dotProduct =
+      movementVector.x * predatorVector.x + movementVector.y * predatorVector.y;
+    const movementMagnitude = Math.sqrt(
+      movementVector.x * movementVector.x + movementVector.y * movementVector.y
+    );
+
+    const angleBetweenVectors = Math.acos(
+      dotProduct / (movementMagnitude * distanceToPredator)
+    );
+
+    return angleBetweenVectors;
   }
 }
 

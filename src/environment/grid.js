@@ -1,8 +1,9 @@
-// grid.js
 class Grid {
   constructor(size) {
     this.size = size;
-    this.obstacles = [];
+    this.obstacles = Array.from({ length: size }, () =>
+      Array.from({ length: size }, () => false)
+    );
   }
 
   setPredatorsAndPreys(predators, preys) {
@@ -11,13 +12,11 @@ class Grid {
   }
 
   addObstacle(x, y) {
-    this.obstacles.push({ x, y });
+    this.obstacles[x][y] = true;
   }
 
   isObstacle(x, y) {
-    return this.obstacles.some(
-      (obstacle) => obstacle.x === x && obstacle.y === y
-    );
+    return this.obstacles[x][y];
   }
 
   isValidMove(x, y) {
