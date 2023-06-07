@@ -11,21 +11,24 @@ class Predator extends Agent {
     this.preys = preys;
     this.visionRange = 5;
     this.lastCatchStep = 0;
+    this.id = Predator.nextId++;
   }
 
-  spawn() {
-    console.log(`Predator was spawned!`);
+  static nextId = 1;
 
+  spawn() {
     const newPredator = new Predator(null, null, this.grid, this.preys);
     this.grid.placePredators([newPredator]);
+    console.log(
+      `[Predator]: ${this.id} spawned at [${newPredator.x},${newPredator.y}]`
+    );
+
     return newPredator;
   }
 
   chooseAction(state) {
     const visiblePreys = this.preys.filter((prey) => this.canSee(prey));
-    const visibleObstacles = this.grid.obstacles.filter((obstacle) =>
-      this.canSee({ x: obstacle.x, y: obstacle.y })
-    );
+    const visibleObstacles = this.grid.getVisibleObstacles(this);
 
     const actions = this.getActions();
 

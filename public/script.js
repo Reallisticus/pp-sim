@@ -13,6 +13,7 @@ socket.on('data', (data) => {
   updateDots(data.obstacles, 'obstacle');
   updateDots(data.predators, 'predator', data.visiblePreysForPredators);
   updateDots(data.preys, 'prey', data.visiblePredatorsForPreys);
+  updateGrass(data.grass);
 });
 
 function updateDots(agentData, type, visibilityData = false) {
@@ -54,7 +55,6 @@ function createDot(x, y, type) {
   dotElement.style.position = 'absolute';
 
   gridEl.appendChild(dotElement);
-
   if (type !== 'obstacle') {
     moveDot(dotElement, x, y);
   } else {
@@ -77,7 +77,7 @@ function moveDot(dot, x, y, animate = true) {
   const cellSize =
     Math.min(window.innerWidth, window.innerHeight) / config.gridSize;
 
-  if (animate) {
+  if (animate && dot.className !== 'grass') {
     const rect = dot.getBoundingClientRect();
     const gridRect = gridEl.getBoundingClientRect();
     const currentX = rect.left - gridRect.left;
@@ -131,6 +131,25 @@ function moveDot(dot, x, y, animate = true) {
   } else {
     dot.style.transform = `translate(${x * cellSize}px, ${y * cellSize}px)`;
   }
+}
+
+function updateGrass(grassData) {
+  const existingGrass = document.querySelectorAll('.grass');
+
+  for (let i = grassData.length; i < existingGrass.length; i++) {
+    existingGrass[i].remove();
+  }
+
+  grassData.forEach((grass, index) => {
+    let grassElement;
+
+    if (index < existingGrass.length) {
+      grassElement = existingGrass[index];
+      moveDot(grassElement, grass.x, grass.y);
+    } else {
+      grassElement = createDot(grass.x, grass.y, 'grass');
+    }
+  });
 }
 
 function generateEmptyCells() {

@@ -10,13 +10,15 @@ const config = {
   predatorReproductionReward: 100,
   preyReproductionThreshold: 100,
   preyReproductionReward: 100,
-  predatorStarvationThreshold: 200,
-  preySurvivalThreshold: 200,
+  predatorStarvationThreshold: 50,
+  preySurvivalThreshold: 50,
   collisionRewardPredator: -1000,
   collisionRewardPrey: -1000,
   rewardFactor: 1.5,
   obstaclePenaltyFactor: 0.001,
   minObstacleDistance: 1,
+  nrOfGrassObjects: 10,
+  grassRespawnTime: 10000, // in milliseconds
 };
 
 module.exports = config;

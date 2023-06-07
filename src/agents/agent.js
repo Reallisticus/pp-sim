@@ -300,30 +300,6 @@ class Agent {
       );
     }
   }
-
-  // updateQTable(state, action, reward, nextState) {
-  //   const stateStr = this.stateToString(state);
-  //   const nextStateStr = this.stateToString(nextState);
-  //   if (!this.qTable[stateStr]) {
-  //     this.qTable[stateStr] = {};
-  //   }
-  //   const oldQ = this.qTable[stateStr][action] || 0;
-  //   const nextMaxQ = Math.max(
-  //     ...Object.values(this.qTable[nextStateStr] || {})
-  //   );
-  //   const learningRate = 1 / (1 + this.stepCount / 1000);
-
-  //   this.qTable[stateStr][action] =
-  //     oldQ + learningRate * (reward + 0.9 * nextMaxQ - oldQ);
-  //   this.stepCount++;
-
-  //   if (this.qTable[stateStr][action] > 0) {
-  //     console.log(
-  //       `Agent [${this.constructor.name}] updated qTable for state [${stateStr}] ` +
-  //         ` and action [${action}] to ${this.qTable[stateStr][action]}`
-  //     );
-  //   }
-  // }
 }
 
 module.exports = Agent;
